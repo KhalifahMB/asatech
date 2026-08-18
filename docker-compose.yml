@@ -1,0 +1,107 @@
+# =============================================================================
+# ASATECH — Full stack orchestration
+# =============================================================================
+# Services:
+#   mongodb   — MongoDB 7 database
+#   backend   — Express API (port 8080)
+#   frontend  — Static frontend served by Nginx (port 5173)
+#
+# Prerequisites:
+#   1. Copy .env.example → .env and configure VITE_ variables (frontend)
+#   2. Copy backend/.env.example → backend/.env and configure backend secrets
+#
+# Start everything:
+#   docker compose up -d
+#
+# Seed the database (first run only):
+#   docker compose exec backend npm run seed
+# =============================================================================
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: asatech-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-asatech}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-change_me_in_production}
+      MONGO_INITDB_DATABASE: asatech
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    ports:
+      # Only exposed for local dev tools. Remove in production behind
+      # a private network.
+      - "127.0.0.1:27017:27017"
+    networks:
+      - asatech-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: asatech-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 8080
+      # Override MongoDB URI to point at the docker service
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-asatech}:${MONGO_ROOT_PASSWORD:-change_me_in_production}@mongodb:27017/asatech?authSource=admin
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      TRUST_PROXY: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - asatech-net
+    volumes:
+      - ./backend/logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Build-time vars are baked into the static bundle
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
+        VITE_PAYSTACK_PUBLIC_KEY: ${VITE_PAYSTACK_PUBLIC_KEY:-}
+        VITE_APP_MODE: ${VITE_APP_MODE:-production}
+    container_name: asatech-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - asatech-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  asatech-net:
+    driver: bridge
