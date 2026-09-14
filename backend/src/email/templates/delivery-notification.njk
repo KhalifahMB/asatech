@@ -1,0 +1,46 @@
+{% extends "base.njk" %}
+
+{% block content %}
+  <h2>Your order has {{ statusLabel | lower }}</h2>
+  <p>Hi {{ order.customerName }},</p>
+  {% if status == 'shipped' %}
+  <p>
+    Good news — your order <strong>{{ order.ref }}</strong> has been shipped and is on
+    its way to <strong>{{ order.shippingAddress.city }}, {{ order.shippingAddress.state }}</strong>.
+  </p>
+  {% elif status == 'delivered' %}
+  <p>
+    Your order <strong>{{ order.ref }}</strong> has been delivered to
+    <strong>{{ order.shippingAddress.city }}, {{ order.shippingAddress.state }}</strong>.
+    We hope you love your new gadgets!
+  </p>
+  {% else %}
+  <p>
+    There has been an update on your order <strong>{{ order.ref }}</strong>.
+  </p>
+  {% endif %}
+
+  <table class="table">
+    <thead>
+      <tr><th>Item</th><th>Qty</th><th style="text-align:right">Price</th></tr>
+    </thead>
+    <tbody>
+      {% for item in order.items %}
+      <tr>
+        <td>{{ item.name }}</td>
+        <td>&times;{{ item.quantity }}</td>
+        <td style="text-align:right">{{ item.price * item.quantity | naira }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total-row"><td colspan="2">Total</td><td style="text-align:right">{{ order.total | naira }}</td></tr>
+    </tbody>
+  </table>
+
+  {% if status == 'shipped' %}
+  <p class="muted">Please keep an eye on your phone for delivery updates from the courier.</p>
+  {% elif status == 'delivered' %}
+  <p class="muted">Enjoy your purchase! If anything isn't right, our support team is here to help.</p>
+  {% endif %}
+
+  <a class="btn" href="{{ trackingUrl }}">Track your order</a>
+{% endblock %}

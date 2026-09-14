@@ -1,0 +1,48 @@
+{% extends "base.njk" %}
+
+{% block content %}
+  <h2>Order confirmed!</h2>
+  <p>Hi {{ order.customerName }},</p>
+  <p>Thank you for your order. We've received your payment and it's now being prepared.</p>
+
+  <table class="table">
+    <tr>
+      <th>Order reference</th>
+      <td>{{ order.ref }}</td>
+    </tr>
+    <tr>
+      <th>Payment</th>
+      <td>Paid</td>
+    </tr>
+    {% if order.shippingAddress %}
+    <tr>
+      <th>Deliver to</th>
+      <td>{{ order.shippingAddress.name }}<br>
+        {% if order.shippingAddress.line1 %}{{ order.shippingAddress.line1 }}<br>{% endif %}
+        {% if order.shippingAddress.line2 %}{{ order.shippingAddress.line2 }}<br>{% endif %}
+        {{ order.shippingAddress.city }}, {{ order.shippingAddress.state }}
+      </td>
+    </tr>
+    {% endif %}
+  </table>
+
+  <table class="table">
+    <thead>
+      <tr><th>Item</th><th>Qty</th><th style="text-align:right">Price</th></tr>
+    </thead>
+    <tbody>
+      {% for item in order.items %}
+      <tr>
+        <td>{{ item.name }}</td>
+        <td>&times;{{ item.quantity }}</td>
+        <td style="text-align:right">{{ item.price * item.quantity | naira }}</td>
+      </tr>
+      {% endfor %}
+      <tr><td colspan="2">Shipping</td><td style="text-align:right">{{ order.shipping | naira }}</td></tr>
+      <tr class="total-row"><td colspan="2">Total</td><td style="text-align:right">{{ order.total | naira }}</td></tr>
+    </tbody>
+  </table>
+
+  <p>We'll email you a notification as soon as your order ships. You can track progress in your account at any time.</p>
+  <a class="btn" href="{{ trackingUrl }}">Track your order</a>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.njk" %}
+
+{% block content %}
+  <h2>Verify your email</h2>
+  <p>Hi {{ user.name }},</p>
+  <p>
+    Welcome to ASATECH! To finish setting up your account, please confirm your email
+    address with the one-time code below.
+  </p>
+  <span class="otp">{{ otp }}</span>
+  <p class="muted">
+    This code expires in {{ expiresInMinutes }} minutes. If you didn't create an
+    ASATECH account, you can safely ignore this email.
+  </p>
+  <div class="note">Enter the 6-digit code on the verification screen to activate your account.</div>
+{% endblock %}

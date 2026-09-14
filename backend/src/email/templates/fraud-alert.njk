@@ -1,0 +1,18 @@
+{% extends "base.njk" %}
+
+{% block content %}
+  <h2>Fraud alert — {{ alert.severity | upper }}</h2>
+  <p>A high-risk transaction has been flagged and requires review.</p>
+
+  <table class="table">
+    <tr><th>Transaction</th><td>{{ alert.transactionRef }}</td></tr>
+    <tr><th>Order</th><td>{{ alert.orderRef }}</td></tr>
+    <tr><th>Customer</th><td>{{ alert.customerName }} &lt;{{ alert.customerEmail }}&gt;</td></tr>
+    <tr><th>Amount</th><td>{{ alert.amount | naira }}</td></tr>
+    <tr><th>Risk score</th><td>{{ alert.riskScore }}/100 ({{ alert.riskLevel }})</td></tr>
+    <tr><th>Factors</th><td>{{ alert.factors | join(', ') }}</td></tr>
+  </table>
+
+  <p>Review the alert in the admin dashboard to approve, reject, or resolve it.</p>
+  <a class="btn" href="{{ reviewUrl }}">Review alert</a>
+{% endblock %}
