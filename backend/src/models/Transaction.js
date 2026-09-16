@@ -12,6 +12,14 @@ const transactionSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
   },
+  // Client-generated uuid scoped to a single checkout attempt. Prevents retries
+  // from creating duplicate orders / Paystack sessions.
+  idempotencyKey: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  gatewayMessage: String,
   orderId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Order',
@@ -85,8 +93,6 @@ const transactionSchema = new mongoose.Schema({
 });
 
 // Indexes
-transactionSchema.index({ reference: 1 });
-transactionSchema.index({ paystackReference: 1 });
 transactionSchema.index({ orderId: 1 });
 transactionSchema.index({ customerId: 1, createdAt: -1 });
 transactionSchema.index({ status: 1 });

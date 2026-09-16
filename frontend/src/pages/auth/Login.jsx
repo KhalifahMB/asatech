@@ -36,7 +36,12 @@ export default function Login() {
       const user = await login({ email, password });
       navigate(user.role === "admin" ? "/admin" : from, { replace: true });
     } catch (err) {
-      setFormError(err.message || "Unable to sign in. Please try again.");
+      if (err.code === "EMAIL_NOT_VERIFIED") {
+        setFormError("Please verify your email address before signing in.");
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`, { state: { from: "/login", message: "Verify your email to sign in" }, replace: true });
+      } else {
+        setFormError(err.message || "Unable to sign in. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

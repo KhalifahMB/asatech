@@ -79,7 +79,7 @@ export default function ProductForm() {
       stock: Number(form.stock),
       rating: 4.5,
       ratingCount: 0,
-      images: [form.image || `/images/${form.category === "smartphones" ? "phone-1" : form.category === "laptops" ? "laptop-1" : form.category === "tablets" ? "tablet-1" : form.category === "smartwatches" ? "watch-1" : form.category === "headphones" ? "headphone-1" : form.category === "chargers" ? "charger-1" : "phone-1"}.jpg`],
+      images: [form.image || `${form.category === "smartphones" ? "phone-1" : form.category === "laptops" ? "laptop-1" : form.category === "tablets" ? "tablet-1" : form.category === "smartwatches" ? "watch-1" : form.category === "headphones" ? "headphone-1" : form.category === "chargers" ? "charger-1" : "phone-1"}.jpg`],
       specs: [{ label: "Category", value: CATEGORY_LABELS[form.category] }],
     };
 

@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import User from '../models/User.js';
 import Order from '../models/Order.js';
 import { generateToken } from '../utils/generateToken.js';
@@ -10,6 +9,10 @@ import { auditLogger } from '../utils/logger.js';
  * @desc    Register new user
  * @route   POST /api/v1/auth/register
  * @access  Public
+ *
+ * A user is NOT considered active until their email is verified. We generate an
+ * OTP, email it, and return without issuing a session token so the frontend can
+ * route the user to the verification screen.
  */
 export const register = async (req, res, next) => {
   try {
@@ -21,7 +24,7 @@ export const register = async (req, res, next) => {
       return next(ErrorResponse.conflict('Email already registered'));
     }
 
-    // Create user
+    // Create user (emailVerified defaults to false)
     const user = await User.create({
       name,
       email,
@@ -29,8 +32,22 @@ export const register = async (req, res, next) => {
       phone,
     });
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Generate & send verification OTP (best-effort; user can resend)
+    const otp = user.generateVerificationOtp();
+    await user.save({ validateBeforeSave: false });
+
+    let emailDelivered = false;
+    try {
+      await emailService.sendVerificationOtp(user, otp);
+      emailDelivered = true;
+    } catch (emailError) {
+      auditLogger.error('Verification OTP email failed', {
+        actor: email,
+        action: 'register',
+        error: emailError.message,
+      });
+      // Do not block registration — the user can request a resend
+    }
 
     // Audit log
     auditLogger.info('User registered', {
@@ -43,14 +60,124 @@ export const register = async (req, res, next) => {
     res.status(201).json({
       success: true,
       data: {
-        token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        },
+        requiresVerification: true,
+        email: user.email,
+        emailDelivered,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify a user's email with the OTP sent at registration
+ * @route   POST /api/v1/auth/verify-email
+ * @access  Public
+ */
+export const verifyEmail = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return next(ErrorResponse.badRequest('Email and verification code are required'));
+    }
+
+    const user = await User.findOne({ email }).select('+verificationOtp +verificationOtpExpires');
+    if (!user) {
+      return next(ErrorResponse.badRequest('Invalid or expired verification code', 'INVALID_OTP'));
+    }
+
+    if (user.emailVerified) {
+      return res.json({
+        success: true,
+        data: { emailVerified: true, message: 'Email already verified' },
+      });
+    }
+
+    const result = user.verifyEmailOtp(otp);
+    if (!result.valid) {
+      auditLogger.warn('Email verification failed', {
+        actor: email,
+        action: 'verify_email',
+        resource: 'User',
+        status: 'failed',
+        reason: result.reason,
+      });
+
+      if (result.reason === 'expired') {
+        return next(ErrorResponse.badRequest('Verification code has expired. Please request a new one.', 'OTP_EXPIRED'));
+      }
+      return next(ErrorResponse.badRequest('Invalid verification code', 'INVALID_OTP'));
+    }
+
+    await user.save({ validateBeforeSave: false });
+
+    auditLogger.info('Email verified', {
+      actor: email,
+      action: 'verify_email',
+      resource: 'User',
+      status: 'success',
+    });
+
+    res.json({
+      success: true,
+      data: { emailVerified: true },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Resend the email verification OTP
+ * @route   POST /api/v1/auth/resend-verification
+ * @access  Public
+ */
+export const resendVerification = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return next(ErrorResponse.badRequest('Email is required'));
+    }
+
+    const user = await User.findOne({ email });
+
+    // Anti-enumeration: always return a generic success message
+    if (!user) {
+      return res.json({
+        success: true,
+        message: 'If an account exists, a verification code has been sent',
+      });
+    }
+
+    if (user.emailVerified) {
+      return res.json({
+        success: true,
+        data: { emailVerified: true },
+      });
+    }
+
+    const otp = user.generateVerificationOtp();
+    await user.save({ validateBeforeSave: false });
+
+    let emailDelivered = false;
+    try {
+      await emailService.sendVerificationOtp(user, otp);
+      emailDelivered = true;
+    } catch (emailError) {
+      auditLogger.error('Verification OTP resend failed', {
+        actor: email,
+        action: 'resend_verification',
+        error: emailError.message,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'If an account exists, a verification code has been sent',
+      data: { emailDelivered },
     });
   } catch (error) {
     next(error);
@@ -115,6 +242,23 @@ export const login = async (req, res, next) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Strict enforcement: customer accounts must verify their email before
+    // they can sign in. Admins (seeded/direct-created) are trusted.
+    if (user.role !== 'admin' && user.emailVerified === false) {
+      auditLogger.warn('Login blocked - email not verified', {
+        actor: email,
+        action: 'login',
+        resource: 'User',
+        status: 'failed',
+      });
+      return next(
+        ErrorResponse.forbidden(
+          'Please verify your email address before signing in. A verification code has not been sent yet — request a new one.',
+          'EMAIL_NOT_VERIFIED'
+        )
+      );
+    }
+
     // Generate token
     const token = generateToken(user._id);
 
@@ -137,6 +281,7 @@ export const login = async (req, res, next) => {
           email: user.email,
           role: user.role,
           phone: user.phone,
+          emailVerified: user.emailVerified,
         },
       },
     });
@@ -199,6 +344,7 @@ export const getMe = async (req, res, next) => {
           role: user.role,
           phone: user.phone,
           status: user.status,
+          emailVerified: user.emailVerified,
           addresses: user.addresses,
           lastLogin: user.lastLogin,
           createdAt: user.createdAt,
@@ -212,7 +358,7 @@ export const getMe = async (req, res, next) => {
 };
 
 /**
- * @desc    Request password reset
+ * @desc    Request password reset — emails a 6-digit OTP
  * @route   POST /api/v1/auth/password/reset-request
  * @access  Public
  */
@@ -230,17 +376,17 @@ export const requestPasswordReset = async (req, res, next) => {
     if (!user) {
       return res.json({
         success: true,
-        message: 'If an account exists, a reset link has been sent',
+        message: 'If an account exists, a password reset code has been sent',
       });
     }
 
-    // Generate reset token
-    const resetToken = user.generateResetToken();
+    // Generate reset OTP
+    const otp = user.generateResetOtp();
     await user.save({ validateBeforeSave: false });
 
     // Send email
     try {
-      await emailService.sendPasswordReset(user.email, resetToken);
+      await emailService.sendPasswordReset(user, otp);
     } catch (emailError) {
       auditLogger.error('Password reset email failed', {
         actor: email,
@@ -259,7 +405,7 @@ export const requestPasswordReset = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'If an account exists, a reset link has been sent',
+      message: 'If an account exists, a password reset code has been sent',
     });
   } catch (error) {
     next(error);
@@ -267,28 +413,40 @@ export const requestPasswordReset = async (req, res, next) => {
 };
 
 /**
- * @desc    Reset password with token
+ * @desc    Reset password with OTP + new password
  * @route   POST /api/v1/auth/password/reset
  * @access  Public
  */
 export const resetPassword = async (req, res, next) => {
   try {
-    const { token, password } = req.body;
+    const { email, otp, password } = req.body;
 
-    if (!token || !password) {
-      return next(ErrorResponse.badRequest('Token and password are required'));
+    if (!email || !otp || !password) {
+      return next(ErrorResponse.badRequest('Email, code and new password are required'));
     }
 
-    // Hash the token to find user
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-
-    const user = await User.findOne({
-      passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() },
-    });
+    const user = await User.findOne({ email }).select('+passwordResetOtp +passwordResetExpires');
 
     if (!user) {
-      return next(ErrorResponse.badRequest('Invalid or expired reset token'));
+      return next(ErrorResponse.badRequest('Invalid or expired reset code', 'INVALID_OTP'));
+    }
+
+    const result = user.verifyResetOtp(otp);
+    if (!result.valid) {
+      auditLogger.warn('Password reset failed - invalid OTP', {
+        actor: email,
+        action: 'password_reset',
+        resource: 'User',
+        status: 'failed',
+        reason: result.reason,
+      });
+
+      if (result.reason === 'expired') {
+        return next(
+          ErrorResponse.badRequest('Reset code has expired. Please request a new one.', 'OTP_EXPIRED')
+        );
+      }
+      return next(ErrorResponse.badRequest('Invalid reset code', 'INVALID_OTP'));
     }
 
     // Set new password
@@ -309,6 +467,59 @@ export const resetPassword = async (req, res, next) => {
     res.json({
       success: true,
       message: 'Password reset successful',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Change password for an authenticated user
+ * @route   POST /api/v1/auth/password/change
+ * @access  Private
+ */
+export const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return next(ErrorResponse.badRequest('Current and new password are required'));
+    }
+
+    if (newPassword.length < 8) {
+      return next(ErrorResponse.badRequest('New password must be at least 8 characters'));
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user) {
+      return next(ErrorResponse.notFound('User not found'));
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      auditLogger.warn('Password change failed - current password incorrect', {
+        actor: user.email,
+        action: 'change_password',
+        resource: 'User',
+        status: 'failed',
+      });
+      return next(ErrorResponse.badRequest('Current password is incorrect', 'INVALID_PASSWORD'));
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    auditLogger.info('Password changed', {
+      actor: user.email,
+      action: 'change_password',
+      resource: 'User',
+      status: 'success',
+    });
+
+    res.json({
+      success: true,
+      message: 'Password updated successfully',
     });
   } catch (error) {
     next(error);

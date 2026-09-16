@@ -34,13 +34,11 @@ const config = {
     baseUrl: 'https://api.paystack.co',
   },
 
-  // Email
-  email: {
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT, 10) || 587,
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-    from: process.env.EMAIL_FROM || 'ASATECH <noreply@asatech.ng>',
+  // Email (Brevo — transactional REST API)
+  brevo: {
+    apiKey: process.env.BREVO_API_KEY,
+    senderEmail: process.env.BREVO_SENDER_EMAIL || 'noreply@asatech.ng',
+    senderName: process.env.BREVO_SENDER_NAME || 'ASATECH',
   },
 
   // Frontend
@@ -73,12 +71,13 @@ const config = {
 // ─── Required environment variables validation ────────────────────────────
 const requiredVars = ['MONGODB_URI', 'JWT_SECRET'];
 
-// In production, payment credentials are also required
+// In production, payment + transactional email credentials are also required
 if (isProduction) {
   requiredVars.push(
     'PAYSTACK_SECRET_KEY',
     'PAYSTACK_PUBLIC_KEY',
     'PAYSTACK_WEBHOOK_SECRET',
+    'BREVO_API_KEY',
   );
 }
 

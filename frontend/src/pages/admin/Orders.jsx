@@ -75,10 +75,10 @@ export default function AdminOrders() {
             </TableHead>
             <TableBody>
               {filtered.map((o) => (
-                <TableRow key={o.id} hover component={Link} to={`/admin/orders/${o.ref}`} sx={{ textDecoration: "none", "&:last-child td": { border: 0 } }}>
+                <TableRow key={o._id || o.id} hover component={Link} to={`/admin/orders/${o._id || o.id}`} sx={{ textDecoration: "none", "&:last-child td": { border: 0 } }}>
                   <TableCell sx={{ fontWeight: 600 }}>{o.ref}</TableCell>
                   <TableCell>{o.customerName}</TableCell>
-                  <TableCell>{formatDate(o.date)}</TableCell>
+                  <TableCell>{formatDate(o.date || o.createdAt)}</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 600 }}>{formatCurrency(o.total)}</TableCell>
                   <TableCell><StatusBadge status={o.paymentStatus} /></TableCell>
                   <TableCell><StatusBadge status={o.orderStatus} /></TableCell>

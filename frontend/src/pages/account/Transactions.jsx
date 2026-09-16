@@ -78,14 +78,14 @@ export default function Transactions() {
           </div>
           {filtered.map((t) => (
             <button
-              key={t.id}
+              key={t._id || t.id}
               onClick={() => setSelected(t)}
               className="grid w-full grid-cols-2 gap-2 px-5 py-3.5 text-left transition hover:bg-raised sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-4"
             >
               <span className="col-span-2 font-mono text-xs font-semibold text-ink sm:col-span-1">
                 {t.reference}
               </span>
-              <span className="text-xs text-muted">{formatDateTime(t.date)}</span>
+              <span className="text-xs text-muted">{formatDateTime(t.date || t.createdAt)}</span>
               <span className="text-sm font-semibold text-ink">{formatCurrency(t.amount)}</span>
               <span><RiskBadge level={t.riskLevel} score={t.riskScore} /></span>
               <span className="justify-self-end"><StatusBadge status={t.status} /></span>
@@ -110,7 +110,7 @@ export default function Transactions() {
                   ["Order", selected.orderRef],
                   ["Date", formatDateTime(selected.date)],
                   ["Amount", formatCurrency(selected.amount)],
-                  ["Channel", selected.channel.toUpperCase()],
+                  ["Channel", selected.channel?.toUpperCase() || "—"],
                   ["Method", selected.method],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4">

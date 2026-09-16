@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Layouts
 import StorefrontLayout from "./layouts/StorefrontLayout";
@@ -17,12 +17,14 @@ import Catalog from "./pages/Catalog";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
+import PaymentSuccess from "./pages/PaymentSuccess";
 
 // Auth
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
+import VerifyEmail from "./pages/auth/VerifyEmail";
 
 // Customer account
 import AccountOverview from "./pages/account/Overview";
@@ -54,7 +56,7 @@ import NotFound from "./pages/NotFound";
 export default function App() {
   return (
     <ErrorBoundary>
-      <HashRouter>
+      <BrowserRouter>
         <ScrollToTop />
         <Routes>
           {/* Public storefront */}
@@ -64,6 +66,7 @@ export default function App() {
             <Route path="/products/:slug" element={<ProductDetails />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />
+            <Route path="/payment/:orderId/success" element={<RequireAuth><PaymentSuccess /></RequireAuth>} />
           </Route>
 
           {/* Authentication */}
@@ -72,6 +75,7 @@ export default function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
           </Route>
 
           {/* Customer account */}
@@ -85,7 +89,7 @@ export default function App() {
             <Route path="/account" element={<AccountOverview />} />
             <Route path="/account/profile" element={<AccountProfile />} />
             <Route path="/account/orders" element={<AccountOrders />} />
-            <Route path="/account/orders/:ref" element={<AccountOrderDetails />} />
+            <Route path="/account/orders/:id" element={<AccountOrderDetails />} />
             <Route path="/account/transactions" element={<AccountTransactions />} />
             <Route path="/account/wishlist" element={<Wishlist />} />
             <Route path="/account/payment-methods" element={<PaymentMethods />} />
@@ -107,7 +111,7 @@ export default function App() {
             <Route path="/admin/products/:id/edit" element={<ProductForm />} />
             <Route path="/admin/inventory" element={<Inventory />} />
             <Route path="/admin/orders" element={<AdminOrders />} />
-            <Route path="/admin/orders/:ref" element={<AdminOrderDetails />} />
+            <Route path="/admin/orders/:id" element={<AdminOrderDetails />} />
             <Route path="/admin/customers" element={<Customers />} />
             <Route path="/admin/transactions" element={<AdminTransactions />} />
             <Route path="/admin/fraud-alerts" element={<FraudAlerts />} />
@@ -118,7 +122,7 @@ export default function App() {
 
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </HashRouter>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

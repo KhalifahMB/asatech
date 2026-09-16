@@ -12,6 +12,12 @@ const FEATURES = [
 export default function AuthLayout() {
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[2000] focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to content
+      </a>
       <div className="relative hidden flex-1 flex-col justify-between overflow-hidden bg-canvas p-10 lg:flex">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(59,130,246,0.12),transparent_45%)]" />
         <Link to="/" className="relative">
@@ -47,7 +53,7 @@ export default function AuthLayout() {
         <div className="absolute right-5 top-5 hidden lg:block">
           <ThemeToggle />
         </div>
-        <div className="flex flex-1 items-center justify-center px-5 py-8 sm:px-10">
+        <div id="main" tabIndex={-1} className="flex flex-1 items-center justify-center px-5 py-8 sm:px-10">
           <div className="w-full max-w-sm">
             <Outlet />
           </div>

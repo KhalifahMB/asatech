@@ -63,11 +63,12 @@ const RISK_META = {
   high: { label: "High risk", tone: "danger" },
 };
 
-export function StatusBadge({ status, label, className, dot = true }) {
+export function StatusBadge({ status, label, prefix, className, dot = true }) {
   const meta = STATUS_META[status] || { label: label || status, tone: "neutral" };
+  const text = label || meta.label;
   return (
     <Pill tone={meta.tone} dot={dot} className={className}>
-      {label || meta.label}
+      {prefix ? `${prefix} · ${text}` : text}
     </Pill>
   );
 }

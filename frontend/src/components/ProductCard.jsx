@@ -3,6 +3,7 @@ import { Heart, ShoppingCart, Check } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/utils/cn";
 import { formatCurrency } from "@/lib/format";
+import { productImageUrl } from "@/lib/image";
 import { CATEGORY_LABELS } from "@/lib/constants";
 import { useCart } from "@/state/CartContext";
 import { useWishlist } from "@/state/wishlistStore";
@@ -20,7 +21,7 @@ export function ProductCard({ product, className }) {
   const wishlist = useWishlist();
   const toast = useToast();
   const [added, setAdded] = useState(false);
-  const wished = wishlist.has(product.id);
+  const wished = wishlist.has(product._id);
   const out = product.stock <= 0;
   const pct = discountPct(product);
 
@@ -41,7 +42,7 @@ export function ProductCard({ product, className }) {
       <div className="relative aspect-square overflow-hidden bg-raised">
         <Link to={`/products/${product.slug}`} aria-label={product.name}>
           <img
-            src={product.images[0]}
+            src={productImageUrl(product.images[0])}
             alt={product.name}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -58,7 +59,7 @@ export function ProductCard({ product, className }) {
           </span>
         )}
         <button
-          onClick={() => wishlist.toggle(product.id)}
+          onClick={() => wishlist.toggle(product._id)}
           aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
           aria-pressed={wished}
           className={cn(

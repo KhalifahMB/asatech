@@ -65,13 +65,26 @@ export async function login({ email, password }) {
 
 /**
  * Register a new user account.
+ * Returns { requiresVerification, email } — no session is created until the
+ * email address is verified.
  */
 export async function register({ name, email, password, phone }) {
   const response = await client.post("/auth/register", { name, email, password, phone });
-  if (response?.token && response?.user) {
-    setSession(response.token, response.user);
-  }
   return response;
+}
+
+/**
+ * Verify email with the OTP sent at registration.
+ */
+export async function verifyEmail({ email, otp }) {
+  return client.post("/auth/verify-email", { email, otp });
+}
+
+/**
+ * Resend the email verification OTP.
+ */
+export async function resendVerification(email) {
+  return client.post("/auth/resend-verification", { email });
 }
 
 /**
@@ -82,10 +95,17 @@ export async function requestPasswordReset(email) {
 }
 
 /**
- * Reset password with token from email.
+ * Reset password with OTP from email.
  */
-export async function resetPassword({ token, password }) {
-  return client.post("/auth/password/reset", { token, password });
+export async function resetPassword({ email, otp, password }) {
+  return client.post("/auth/password/reset", { email, otp, password });
+}
+
+/**
+ * Change password for an authenticated user.
+ */
+export async function changePassword({ currentPassword, newPassword }) {
+  return client.post("/auth/password/change", { currentPassword, newPassword });
 }
 
 /**

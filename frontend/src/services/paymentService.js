@@ -31,6 +31,33 @@ export async function initializePayment(payload) {
 }
 
 /**
+ * Resume an existing payment session for an unpaid/failed order.
+ * Returns the original Paystack reference so the popup maps to the
+ * same transaction record on successful completion.
+ *
+ * @param {string} orderId - The order's Mongo _id (or human ref).
+ * @returns {Promise<object>} - { paid, reference, amount, currency, email, publicKey, orderId, orderRef }
+ */
+export async function resumePayment(orderId) {
+  return client.post("/payments/resume", { orderId });
+}
+
+/**
+ * Verify a payment server-side against Paystack.
+ *
+ * The backend calls Paystack's verify endpoint and — if the payment succeeded —
+ * settles the transaction and marks the linked order as paid through the same
+ * idempotent path as the webhook. This is what clears the "paid but stuck on
+ * pending" state even when the webhook hasn't arrived.
+ *
+ * @param {string} reference - Paystack reference (or internal TXN reference)
+ * @returns {Promise<object>} - { transactionStatus, paymentStatus, orderId, orderRef, reference, amount, currency, paidAt }
+ */
+export async function verifyPayment(reference) {
+  return client.get(`/payments/verify/${encodeURIComponent(reference)}`);
+}
+
+/**
  * Launch Paystack inline checkout popup.
  * 
  * Maps backend initialization response to Paystack SDK parameters.

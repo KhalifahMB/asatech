@@ -1,6 +1,7 @@
 import Transaction from '../models/Transaction.js';
 import Order from '../models/Order.js';
 import ErrorResponse from '../utils/errorResponse.js';
+import { verifyUnsettledTransactions } from '../services/paymentVerification.js';
 
 /**
  * @desc    Get transactions for current user
@@ -113,6 +114,26 @@ export const getAllTransactions = async (req, res, next) => {
       page: Number(page),
       data: transactions,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reconcile unsettled transactions against Paystack (admin only)
+ * @route   POST /api/v1/admin/transactions/sync
+ * @access  Private/Admin
+ *
+ * Finds every transaction still pending/processing and verifies it directly
+ * with Paystack, settling or failing it (and its order) atomically. Use after
+ * deploying webhook fixes or to clear payments that were confirmed by Paystack
+ * but never reconciled (the classic "paid but stuck on pending" case).
+ */
+export const syncTransactions = async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    const summary = await verifyUnsettledTransactions({ limit });
+    res.json({ success: true, ...summary });
   } catch (error) {
     next(error);
   }

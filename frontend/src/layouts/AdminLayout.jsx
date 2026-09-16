@@ -89,6 +89,12 @@ export default function AdminLayout() {
 
   return (
     <div className="flex min-h-screen">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[2000] focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to content
+      </a>
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-panel p-5 lg:flex">
         <div className="mb-2 px-2">
           <Logo />
@@ -137,7 +143,7 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
           <Outlet />
         </main>
       </div>

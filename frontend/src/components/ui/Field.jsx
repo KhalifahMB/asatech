@@ -40,6 +40,7 @@ export function PasswordInput({ label, required, error, helperText, ...props }) 
   const [show, setShow] = useState(false);
   return (
     <MuiTextField
+      {...props}
       size="small"
       fullWidth
       variant="outlined"
@@ -53,17 +54,20 @@ export function PasswordInput({ label, required, error, helperText, ...props }) 
         endAdornment: (
           <InputAdornment position="end">
             <IconButton
+              aria-label={show ? "Hide password" : "Show password"}
+              aria-pressed={show}
               onClick={() => setShow((s) => !s)}
               edge="end"
               size="small"
-              aria-label={show ? "Hide password" : "Show password"}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
             >
               {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </IconButton>
           </InputAdornment>
         ),
       }}
-      {...props}
     />
   );
 }

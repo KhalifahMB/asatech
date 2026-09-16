@@ -26,10 +26,10 @@ export function CartProvider({ children }) {
 
   const add = (product, quantity = 1) => {
     setItems((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
+      const existing = prev.find((i) => i.productId === product._id);
       if (existing) {
         return prev.map((i) =>
-          i.productId === product.id
+          i.productId === product._id
             ? { ...i, quantity: Math.min(i.quantity + quantity, product.stock || 99) }
             : i
         );
@@ -37,7 +37,7 @@ export function CartProvider({ children }) {
       return [
         ...prev,
         {
-          productId: product.id,
+          productId: product._id,
           slug: product.slug,
           name: product.name,
           image: product.images[0],

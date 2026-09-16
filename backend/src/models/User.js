@@ -4,6 +4,31 @@ import crypto from 'crypto';
 import validator from 'validator';
 import config from '../config/index.js';
 
+const OTP_TTL_MINUTES = {
+  verification: 10,
+  reset: 15,
+};
+
+/**
+ * Hash an OTP using HMAC-SHA256 keyed by the JWT secret.
+ * OTPs are low-entropy 6-digit codes, so a keyed hash prevents offline
+ * brute-force by anyone who gains read access to the database.
+ */
+function hashOtp(otp) {
+  if (!config.jwtSecret) return otp;
+  return crypto.createHmac('sha256', config.jwtSecret).update(String(otp)).digest('hex');
+}
+
+/**
+ * Constant-time comparison of two hex digests.
+ */
+function safeEqual(a, b) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -64,6 +89,22 @@ const userSchema = new mongoose.Schema({
     type: Date,
     select: false,
   },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  verificationOtp: {
+    type: String,
+    select: false,
+  },
+  verificationOtpExpires: {
+    type: Date,
+    select: false,
+  },
+  passwordResetOtp: {
+    type: String,
+    select: false,
+  },
   passwordChangedAt: Date,
   lastLogin: Date,
   loginAttempts: {
@@ -78,6 +119,9 @@ const userSchema = new mongoose.Schema({
       delete ret.password;
       delete ret.passwordResetToken;
       delete ret.passwordResetExpires;
+      delete ret.verificationOtp;
+      delete ret.verificationOtpExpires;
+      delete ret.passwordResetOtp;
       delete ret.__v;
       return ret;
     },
@@ -85,7 +129,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1, status: 1 });
 
 // Hash password before saving
@@ -151,17 +194,72 @@ userSchema.methods.resetLoginAttempts = function() {
   });
 };
 
+// OTP generation & verification helpers ────────────────────────────────────────
+
 /**
- * Generate password reset token.
- * Returns the RAW token (to be emailed to the user), but stores the SHA-256
- * hash in the database. This means an attacker with DB access can't use the
- * stored value directly.
+ * Generate a 6-digit email verification OTP.
+ * Stores the HMAC hash in `verificationOtp` with a 10-minute TTL.
+ * @returns {string} The plain-text OTP to deliver via email.
  */
-userSchema.methods.generateResetToken = function() {
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  this.passwordResetToken = crypto.createHash('sha256').update(rawToken).digest('hex');
-  this.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
-  return rawToken;
+userSchema.methods.generateVerificationOtp = function () {
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  this.verificationOtp = hashOtp(otp);
+  this.verificationOtpExpires = Date.now() + OTP_TTL_MINUTES.verification * 60 * 1000;
+  return otp;
+};
+
+/**
+ * Verify the email verification OTP.
+ * @param {string} candidate — plain-text OTP supplied by the user.
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+userSchema.methods.verifyEmailOtp = function (candidate) {
+  if (!this.verificationOtp || !this.verificationOtpExpires) {
+    return { valid: false, reason: 'no_otp_sent' };
+  }
+  if (Date.now() > this.verificationOtpExpires.getTime()) {
+    return { valid: false, reason: 'expired' };
+  }
+  const stored = hashOtp(candidate);
+  if (!safeEqual(stored, this.verificationOtp)) {
+    return { valid: false, reason: 'invalid' };
+  }
+  this.emailVerified = true;
+  this.verificationOtp = undefined;
+  this.verificationOtpExpires = undefined;
+  return { valid: true };
+};
+
+/**
+ * Generate a 6-digit password-reset OTP.
+ * @returns {string} Plain-text OTP.
+ */
+userSchema.methods.generateResetOtp = function () {
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  this.passwordResetOtp = hashOtp(otp);
+  this.passwordResetExpires = Date.now() + OTP_TTL_MINUTES.reset * 60 * 1000;
+  return otp;
+};
+
+/**
+ * Verify password-reset OTP.
+ * @param {string} candidate
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+userSchema.methods.verifyResetOtp = function (candidate) {
+  if (!this.passwordResetOtp || !this.passwordResetExpires) {
+    return { valid: false, reason: 'no_otp_sent' };
+  }
+  if (Date.now() > this.passwordResetExpires.getTime()) {
+    return { valid: false, reason: 'expired' };
+  }
+  const stored = hashOtp(candidate);
+  if (!safeEqual(stored, this.passwordResetOtp)) {
+    return { valid: false, reason: 'invalid' };
+  }
+  this.passwordResetOtp = undefined;
+  this.passwordResetExpires = undefined;
+  return { valid: true };
 };
 
 const User = mongoose.model('User', userSchema);

@@ -19,6 +19,7 @@ import { ProductCard } from "@/components/ProductCard";
 import { ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { CATEGORIES } from "@/lib/constants";
 import { getFeatured, listProducts } from "@/services/catalogService";
+import { productImageUrl } from "@/lib/image";
 
 const CATEGORY_ICONS = {
   smartphones: Smartphone,
@@ -104,7 +105,7 @@ export default function Home() {
           </div>
           <div className="relative hidden lg:block">
             <img
-              src="/images/hero.jpg"
+              src={productImageUrl("hero.jpg")}
               alt="ASATECH premium gadget collection"
               className="aspect-[4/3] w-full rounded-3xl border border-line object-cover"
             />
@@ -180,7 +181,7 @@ export default function Home() {
             ) : featured.length > 0 ? (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {featured.map((p) => (
-                  <ProductCard key={p._id || p.id} product={p} />
+                  <ProductCard key={p._id} product={p} />
                 ))}
               </div>
             ) : (
@@ -204,7 +205,7 @@ export default function Home() {
           </div>
           <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {deals.map((p) => (
-              <ProductCard key={p._id || p.id} product={p} />
+              <ProductCard key={p._id} product={p} />
             ))}
           </div>
         </section>
@@ -237,7 +238,7 @@ export default function Home() {
             <p className="mt-1 text-sm text-muted">Top-rated devices across our range.</p>
             <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
               {popular.map((p) => (
-                <ProductCard key={p._id || p.id} product={p} />
+                <ProductCard key={p._id} product={p} />
               ))}
             </div>
           </div>

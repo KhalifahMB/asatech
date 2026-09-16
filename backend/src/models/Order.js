@@ -104,7 +104,6 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Indexes
-orderSchema.index({ ref: 1 });
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, orderStatus: 1 });
 orderSchema.index({ riskLevel: 1 });

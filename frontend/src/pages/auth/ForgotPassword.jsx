@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Field";
 import { requestPasswordReset } from "@/services/authService";
 
 export default function ForgotPassword() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,6 +27,7 @@ export default function ForgotPassword() {
     try {
       await requestPasswordReset(email);
       setSent(true);
+      navigate(`/reset-password?email=${encodeURIComponent(email)}`, { replace: true });
     } catch (err) {
       setError(err.message || "Unable to process the request. Please try again.");
     } finally {
@@ -41,8 +43,8 @@ export default function ForgotPassword() {
         </span>
         <h1 className="mt-5 text-2xl font-bold tracking-tight text-ink">Check your email</h1>
         <p className="mt-2 text-sm text-muted">
-          If an account exists for <span className="font-medium text-ink">{email}</span>, we’ve sent
-          a password reset link.
+          If an account exists for <span className="font-medium text-ink">{email}</span>, we've sent
+          a password reset code.
         </p>
         <Button to="/login" variant="secondary" className="mt-6">
           Back to sign in
@@ -55,7 +57,7 @@ export default function ForgotPassword() {
     <div className="animate-slide-up">
       <h1 className="text-2xl font-bold tracking-tight text-ink">Reset your password</h1>
       <p className="mt-1 text-sm text-muted">
-        Enter your email and we’ll send you a reset link.
+        Enter your email and we'll send you a one-time reset code.
       </p>
       <form onSubmit={handleSubmit} noValidate className="mt-8 flex flex-col gap-5">
         <TextField
@@ -68,7 +70,7 @@ export default function ForgotPassword() {
           required
         />
         <Button type="submit" loading={loading} className="w-full" size="lg">
-          Send reset link
+          Send reset code
         </Button>
       </form>
       <p className="mt-6 text-center text-sm text-muted">

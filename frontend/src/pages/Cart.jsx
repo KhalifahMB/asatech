@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/Feedback";
 import { QuantityControl } from "@/components/QuantityControl";
 import { useCart } from "@/state/CartContext";
 import { formatCurrency } from "@/lib/format";
+import { productImageUrl } from "@/lib/image";
 
 const SHIPPING_FLAT = 2500;
 const FREE_SHIPPING_THRESHOLD = 500000;
@@ -50,7 +51,7 @@ export default function Cart() {
                 to={`/products/${item.slug}`}
                 className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-line bg-raised sm:h-24 sm:w-24"
               >
-                <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                <img src={productImageUrl(item.image)} alt={item.name} className="h-full w-full object-cover" />
               </Link>
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex items-start justify-between gap-3">

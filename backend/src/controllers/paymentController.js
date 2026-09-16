@@ -1,5 +1,5 @@
-import axios from 'axios';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import config from '../config/index.js';
 import Order from '../models/Order.js';
 import Transaction from '../models/Transaction.js';
@@ -12,20 +12,20 @@ import emailService from '../utils/email.js';
 import { logAudit } from '../middleware/audit.js';
 import { auditLogger } from '../utils/logger.js';
 import ErrorResponse from '../utils/errorResponse.js';
-
-const paystackApi = axios.create({
-  baseURL: config.paystack.baseUrl,
-  timeout: 15000,
-  headers: {
-    Authorization: `Bearer ${config.paystack.secretKey || ''}`,
-    'Content-Type': 'application/json',
-  },
-});
+import {
+  paystackApi,
+  markFailedPayment,
+  verifyAndSyncTransaction,
+} from '../services/paymentVerification.js';
 
 /**
  * @desc    Initialize Paystack payment
  * @route   POST /api/v1/payments/initialize
  * @access  Private
+ *
+ * Idempotent: pass an `idempotencyKey` (body or `x-idempotency-key` header)
+ * generated once per checkout attempt. Retries reuse the existing payment
+ * session instead of creating duplicate orders / Paystack references.
  */
 export const initializePayment = async (req, res, next) => {
   try {
@@ -34,10 +34,40 @@ export const initializePayment = async (req, res, next) => {
     }
 
     const { email, currency = 'NGN', items, shipping } = req.body;
+    const idempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'];
 
     // Validate required fields
     if (!email || !items || !Array.isArray(items) || items.length === 0 || !shipping) {
       return next(ErrorResponse.badRequest('Email, items and shipping address are required'));
+    }
+
+    // Idempotency — short-circuit to the existing session for this attempt key,
+    // so reloads / retries / double-submits never create a second order.
+    if (idempotencyKey) {
+      const existing = await Transaction.findOne({ idempotencyKey }).sort({ createdAt: -1 });
+      if (existing) {
+        const existingOrder = await Order.findById(existing.orderId);
+        // Only reuse a session that still belongs to a pending order. A paid or
+        // cancelled order means the key has been consumed — start fresh.
+        if (existingOrder && existingOrder.paymentStatus !== 'cancelled') {
+          return res.status(201).json({
+            success: true,
+            duplicate: true,
+            data: {
+              reference: existing.paystackReference,
+              authorizationUrl: '',
+              accessCode: null,
+              amount: Math.round(existing.amount * 100),
+              currency: existing.currency,
+              publicKey: config.paystack.publicKey,
+              metadata: {
+                orderId: existing.orderId.toString(),
+                orderRef: existing.orderRef,
+              },
+            },
+          });
+        }
+      }
     }
 
     // Fetch products from DB to prevent client-side price tampering
@@ -98,46 +128,82 @@ export const initializePayment = async (req, res, next) => {
     });
 
     // Initialize Paystack transaction
+    // Per Paystack API docs, `amount` must be a string in the currency's subunit
+    // (kobo for NGN) and `metadata` must be a stringified JSON object.
     let paystackResponse;
     try {
+      const amountInKobo = Math.round(total * 100);
       paystackResponse = await paystackApi.post('/transaction/initialize', {
         email,
-        amount: Math.round(total * 100), // kobo
+        amount: String(amountInKobo), // string per Paystack API docs
         currency,
-        metadata: {
+        metadata: JSON.stringify({
           orderId: order._id.toString(),
           orderRef: order.ref,
           customerId: req.user._id.toString(),
-        },
-        callback_url: `${config.frontendUrl}/#/account/orders/${order.ref}`,
+        }),
+        callback_url: `${config.frontendUrl}/#/payment/${order._id}/success`,
       });
     } catch (err) {
       // Roll back the order since payment could not be initialised
       await Order.findByIdAndDelete(order._id).catch(() => {});
+      const paystackMessage =
+        err.response?.data?.message || err.response?.data?.error || err.message;
       auditLogger.error('Paystack initialization failed', {
         status: err.response?.status,
-        message: err.response?.data?.message || err.message,
+        message: paystackMessage,
       });
-      return next(ErrorResponse.paymentRequired('Payment could not be initialised'));
+      return next(
+        ErrorResponse.paymentRequired(paystackMessage || 'Payment could not be initialised')
+      );
     }
 
     const { reference, authorization_url, access_code } = paystackResponse.data.data;
 
-    // Create transaction record
-    const transaction = await Transaction.create({
-      reference: generateTransactionRef(),
-      paystackReference: reference,
-      orderId: order._id,
-      orderRef: order.ref,
-      customerId: req.user._id,
-      customerName: req.user.name,
-      customerEmail: req.user.email,
-      amount: total,
-      currency,
-      status: 'pending',
-      riskScore: fraudAssessment.score,
-      riskLevel: fraudAssessment.riskLevel,
-    });
+    // Create transaction record (handle a rare concurrent race on the same
+    // idempotency key by rolling back and returning the other session).
+    let transaction;
+    try {
+      transaction = await Transaction.create({
+        reference: generateTransactionRef(),
+        paystackReference: reference,
+        idempotencyKey: idempotencyKey || undefined,
+        orderId: order._id,
+        orderRef: order.ref,
+        customerId: req.user._id,
+        customerName: req.user.name,
+        customerEmail: req.user.email,
+        amount: total,
+        currency,
+        status: 'pending',
+        riskScore: fraudAssessment.score,
+        riskLevel: fraudAssessment.riskLevel,
+      });
+    } catch (err) {
+      await Order.findByIdAndDelete(order._id).catch(() => {});
+      if (err.code === 11000 && idempotencyKey) {
+        const existing = await Transaction.findOne({ idempotencyKey }).sort({ createdAt: -1 });
+        if (existing) {
+          return res.status(201).json({
+            success: true,
+            duplicate: true,
+            data: {
+              reference: existing.paystackReference,
+              authorizationUrl: '',
+              accessCode: null,
+              amount: Math.round(existing.amount * 100),
+              currency: existing.currency,
+              publicKey: config.paystack.publicKey,
+              metadata: {
+                orderId: existing.orderId.toString(),
+                orderRef: existing.orderRef,
+              },
+            },
+          });
+        }
+      }
+      throw err;
+    }
 
     // Link back to order
     order.transactionId = transaction._id;
@@ -174,6 +240,144 @@ export const initializePayment = async (req, res, next) => {
           orderId: order._id.toString(),
           orderRef: order.ref,
         },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify a payment against Paystack and sync its status
+ * @route   GET /api/v1/payments/verify/:reference
+ * @access  Private (customer owns it, or admin)
+ *
+ * On-demand reconciliation: customers / the payment screen call this to confirm
+ * whether a payment succeeded. It never trusts the browser — it asks Paystack
+ * and settles the order through the same idempotent path as the webhook.
+ */
+export const verifyPayment = async (req, res, next) => {
+  try {
+    const reference = req.params.reference;
+    if (!reference) {
+      return next(ErrorResponse.badRequest('A transaction reference is required'));
+    }
+
+    const transaction = await Transaction.findOne({
+      $or: [{ paystackReference: reference }, { reference }],
+    });
+
+    if (!transaction) {
+      return next(ErrorResponse.notFound('Transaction not found'));
+    }
+
+    // Customers can only verify their own payments; admins can verify any.
+    if (
+      req.user.role !== 'admin' &&
+      transaction.customerId.toString() !== req.user._id.toString()
+    ) {
+      return next(ErrorResponse.forbidden('You cannot verify this transaction'));
+    }
+
+    let result;
+    if (transaction.status === 'successful') {
+      result = { status: 'successful', reason: 'already-settled' };
+    } else {
+      result = await verifyAndSyncTransaction(transaction);
+    }
+
+    const order = await Order.findById(transaction.orderId).select('ref paymentStatus total');
+
+    res.json({
+      success: true,
+      data: {
+        transactionStatus: result.status,
+        paymentStatus: order?.paymentStatus,
+        orderId: order?._id,
+        orderRef: order?.ref,
+        reference: transaction.paystackReference,
+        amount: order?.total ?? transaction.amount,
+        currency: transaction.currency,
+        paidAt: transaction.paidAt || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Resume an existing payment session for an unpaid order
+ * @route   POST /api/v1/payments/resume
+ * @access  Private
+ *
+ * Lets a customer continue paying for an order whose payment was initialized
+ * but not completed (e.g. abandoned checkout, failed attempt). Reuses the
+ * original Paystack reference so completion maps back to the same
+ * transaction record via the webhook.
+ */
+export const resumePayment = async (req, res, next) => {
+  try {
+    const { orderId } = req.body;
+
+    if (!orderId) {
+      return next(ErrorResponse.badRequest('orderId is required'));
+    }
+
+    const orderQuery = mongoose.Types.ObjectId.isValid(orderId)
+      ? { _id: orderId }
+      : { ref: orderId };
+    const order = await Order.findOne(orderQuery);
+
+    if (!order) {
+      return next(ErrorResponse.notFound('Order not found'));
+    }
+
+    // Customers can only resume their own orders
+    if (
+      req.user.role !== 'admin' &&
+      order.customerId.toString() !== req.user._id.toString()
+    ) {
+      return next(ErrorResponse.forbidden('You cannot resume this order'));
+    }
+
+    // Already paid — nothing to resume
+    if (order.paymentStatus === 'paid') {
+      return res.json({
+        success: true,
+        data: {
+          paid: true,
+          orderId: order._id.toString(),
+          orderRef: order.ref,
+        },
+      });
+    }
+
+    // Reuse the latest payment session so the webhook maps back correctly
+    const transaction = await Transaction.findOne({ orderId: order._id }).sort({
+      createdAt: -1,
+    });
+
+    const reference = transaction?.paystackReference || order.paymentRef;
+    if (!reference) {
+      return next(
+        ErrorResponse.badRequest(
+          'No payment session was found for this order. Please start a new checkout.'
+        )
+      );
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        paid: false,
+        reference,
+        amount: Math.round(order.total * 100),
+        currency: transaction?.currency || 'NGN',
+        email: order.customerEmail,
+        publicKey: config.paystack.publicKey,
+        orderId: order._id.toString(),
+        orderRef: order.ref,
       },
     });
   } catch (error) {
@@ -275,10 +479,18 @@ export const handleWebhook = async (req, res) => {
 
     setImmediate(async () => {
       try {
+        const transaction = await Transaction.findOne({ paystackReference: data.reference });
+        if (!transaction) {
+          auditLogger.error('Webhook transaction not found', { reference: data.reference });
+          return;
+        }
+
         if (event === 'charge.success') {
-          await handleSuccessfulPayment(data);
+          // Verify server-side with Paystack, then settle through the shared
+          // idempotent path (same logic as the verify endpoint / sync script).
+          await verifyAndSyncTransaction(transaction);
         } else if (event === 'charge.failed') {
-          await handleFailedPayment(data);
+          await markFailedPayment(transaction, data);
         }
       } catch (err) {
         auditLogger.error('Async webhook processing failed', {
@@ -294,132 +506,3 @@ export const handleWebhook = async (req, res) => {
     }
   }
 };
-
-/**
- * Handle successful payment — verify with Paystack, update order/transaction,
- * decrement stock, send confirmation email.
- */
-async function handleSuccessfulPayment(data) {
-  const transaction = await Transaction.findOne({ paystackReference: data.reference });
-
-  if (!transaction) {
-    auditLogger.error('Transaction not found for webhook', { reference: data.reference });
-    return;
-  }
-
-  // Idempotency — don't process the same transaction twice
-  if (transaction.status === 'successful') return;
-
-  // Verify with Paystack server-side (never trust the webhook payload alone)
-  const verifyResponse = await paystackApi.get(`/transaction/verify/${data.reference}`);
-  const verification = verifyResponse.data.data;
-
-  if (verification.status !== 'success') {
-    auditLogger.warn('Paystack verification failed', {
-      reference: data.reference,
-      status: verification.status,
-    });
-    return;
-  }
-
-  // Amount mismatch guard
-  if (Math.abs(verification.amount - transaction.amount * 100) > 1) {
-    auditLogger.error('Payment amount mismatch', {
-      reference: data.reference,
-      expected: transaction.amount * 100,
-      received: verification.amount,
-    });
-    transaction.status = 'failed';
-    await transaction.save();
-    return;
-  }
-
-  // Update transaction
-  transaction.status = 'successful';
-  transaction.verifiedAt = new Date();
-  transaction.paidAt = new Date(verification.paid_at || Date.now());
-  transaction.channel = verification.channel;
-  transaction.paystackData = {
-    authorization: verification.authorization?.authorization_code,
-    card: verification.authorization?.card
-      ? {
-          last4: verification.authorization.card.last4,
-          brand: verification.authorization.card.brand,
-          expMonth: verification.authorization.card.exp_month,
-          expYear: verification.authorization.card.exp_year,
-        }
-      : null,
-    bank: verification.authorization?.bank,
-  };
-  await transaction.save();
-
-  // Update order and decrement stock
-  const order = await Order.findById(transaction.orderId);
-  if (order && order.paymentStatus !== 'paid') {
-    order.paymentStatus = 'paid';
-    order.orderStatus = 'processing';
-    order.paymentRef = data.reference;
-    await order.save();
-
-    // Decrement stock atomically
-    await Promise.all(
-      order.items.map((item) =>
-        Product.findByIdAndUpdate(item.productId, {
-          $inc: { stock: -item.quantity },
-        })
-      )
-    );
-
-    // Send confirmation email (best-effort)
-    try {
-      await emailService.sendOrderConfirmation(order, order.customerEmail);
-    } catch (err) {
-      auditLogger.error('Order confirmation email failed', { error: err.message });
-    }
-  }
-
-  // Update fraud alert if one exists
-  if (transaction.riskLevel === 'high') {
-    await FraudAlert.findOneAndUpdate(
-      { transactionId: transaction._id, status: 'new' },
-      { status: 'under-review' }
-    );
-  }
-
-  await logAudit({
-    actor: 'system',
-    actorRole: 'system',
-    action: 'Payment verified',
-    resource: `Transaction:${transaction.reference}`,
-    resourceId: transaction._id,
-    status: 'success',
-    detail: `Order ${order?.ref} paid`,
-  });
-}
-
-/**
- * Handle failed payment.
- */
-async function handleFailedPayment(data) {
-  const transaction = await Transaction.findOne({ paystackReference: data.reference });
-  if (!transaction || transaction.status === 'failed') return;
-
-  transaction.status = 'failed';
-  await transaction.save();
-
-  const order = await Order.findById(transaction.orderId);
-  if (order) {
-    order.paymentStatus = 'failed';
-    await order.save();
-  }
-
-  await logAudit({
-    actor: 'system',
-    actorRole: 'system',
-    action: 'Payment failed',
-    resource: `Transaction:${transaction.reference}`,
-    resourceId: transaction._id,
-    status: 'failed',
-    detail: data?.gateway_response,
-  });
-}

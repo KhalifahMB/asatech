@@ -27,6 +27,7 @@ env.addFilter('naira', (value) => {
 function render(template, context) {
   return env.render(template, {
     year: new Date().getFullYear(),
+    subject: context.subject || '',
     ...context,
   });
 }
@@ -47,10 +48,13 @@ class EmailService {
     this.isConfigured = Boolean(this.apiKey);
 
     if (this.isConfigured) {
-      this.client = new BrevoClient({ apiKey: this.apiKey, timeoutInSeconds: 30 });
+      this.client = new BrevoClient({
+        apiKey: this.apiKey,
+        timeoutInSeconds: 30,
+      });
     } else {
       logger.warn(
-        'BREVO_API_KEY not configured — emails will be logged to console and NOT delivered.'
+        'BREVO_API_KEY not configured — emails will be logged to console and NOT delivered.',
       );
     }
   }
@@ -72,7 +76,10 @@ class EmailService {
     if (!this.isConfigured || !this.client) {
       logger.info(`[EMAIL(logged-only)] To: ${to} | Subject: ${subject}`);
       logger.info(`[EMAIL(logged-only)] Content: ${text.substring(0, 300)}...`);
-      return { loggedOnly: true, message: 'Email logged to console (Brevo not configured)' };
+      return {
+        loggedOnly: true,
+        message: 'Email logged to console (Brevo not configured)',
+      };
     }
 
     try {
@@ -83,7 +90,9 @@ class EmailService {
         sender: this.sender,
         to: [{ email: to, ...(toName ? { name: toName } : {}) }],
       });
-      logger.info(`Email sent to ${to} | Subject: ${subject} | MessageId: ${result.messageId}`);
+      logger.info(
+        `Email sent to ${to} | Subject: ${subject} | MessageId: ${result.messageId}`,
+      );
       return { messageId: result.messageId, loggedOnly: false };
     } catch (error) {
       logger.error(`Brevo email send failed: ${error.message}`);
@@ -142,7 +151,7 @@ class EmailService {
       template: 'order-confirmation.njk',
       context: {
         order,
-        trackingUrl: `${config.frontendUrl}/#/account/orders/${order.ref}`,
+        trackingUrl: `${config.frontendUrl}/account/orders/${order.ref}`,
       },
     });
   }
@@ -170,7 +179,7 @@ class EmailService {
         order,
         status,
         statusLabel,
-        trackingUrl: `${config.frontendUrl}/#/account/orders/${order.ref}`,
+        trackingUrl: `${config.frontendUrl}/account/orders/${order.ref}`,
       },
     });
   }

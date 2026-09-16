@@ -220,7 +220,7 @@ export default function Catalog() {
         <>
           <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
             {pageItems.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p._id} product={p} />
             ))}
           </div>
           {totalPages > 1 && (

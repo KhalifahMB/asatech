@@ -15,7 +15,6 @@ RUN npm ci --no-audit --no-fund
 # Copy sources
 COPY index.html vite.config.ts tsconfig.json ./
 COPY src/ ./src/
-COPY public/ ./public/
 
 # Vite reads env vars at build time. Passed in via docker-compose build args.
 ARG VITE_API_BASE_URL
@@ -56,10 +55,6 @@ server {
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
-    }
-    location /images/ {
-        expires 30d;
-        add_header Cache-Control "public";
     }
 
     # Never cache index.html (so new deploys are picked up)

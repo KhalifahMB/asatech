@@ -12,6 +12,7 @@ import { useCart } from "@/state/CartContext";
 import { useToast } from "@/state/ToastContext";
 import { useWishlist } from "@/state/wishlistStore";
 import { formatCurrency } from "@/lib/format";
+import { productImageUrl } from "@/lib/image";
 import { CATEGORY_LABELS } from "@/lib/constants";
 import { getProduct, getRelated } from "@/services/catalogService";
 
@@ -86,7 +87,7 @@ export default function ProductDetails() {
     ? Math.round((1 - product.price / product.previousPrice) * 100)
     : 0;
   const out = product.stock <= 0;
-  const wished = wishlist.has(product.id);
+  const wished = wishlist.has(product._id);
 
   const handleAdd = () => {
     add(product, qty);
@@ -114,8 +115,9 @@ export default function ProductDetails() {
         <div>
           <div className="overflow-hidden rounded-3xl border border-line bg-panel">
             <img
-              src={product.images[activeImg] || product.images[0]}
+              src={productImageUrl(product.images[activeImg] || product.images[0])}
               alt={product.name}
+              fetchPriority="high"
               className="aspect-square w-full object-cover"
             />
           </div>
@@ -130,7 +132,7 @@ export default function ProductDetails() {
                     activeImg === i ? "border-brand-500" : "border-line hover:border-faint"
                   }`}
                 >
-                  <img src={img} alt="" className="h-full w-full object-cover" />
+                  <img src={productImageUrl(img)} alt="" loading="lazy" className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
@@ -180,7 +182,7 @@ export default function ProductDetails() {
               Add to cart
             </Button>
             <Button
-              onClick={() => wishlist.toggle(product.id)}
+              onClick={() => wishlist.toggle(product._id)}
               variant="secondary"
               aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
             >
@@ -240,7 +242,7 @@ export default function ProductDetails() {
           <h2 className="text-lg font-bold text-ink">You may also like</h2>
           <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
             {related.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p._id} product={p} />
             ))}
           </div>
         </section>

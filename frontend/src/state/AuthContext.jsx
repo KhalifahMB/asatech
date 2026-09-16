@@ -12,10 +12,14 @@ export function AuthProvider({ children }) {
     return u;
   };
 
+  /**
+   * Register does NOT log the user in — email must be verified first.
+   * Returns { requiresVerification, email } on success.
+   */
   const register = async (payload) => {
-    const { user: u } = await authService.register(payload);
-    setUser(u);
-    return u;
+    const result = await authService.register(payload);
+    // Do NOT set user — no token is issued until email is verified.
+    return result;
   };
 
   const logout = async () => {

@@ -21,6 +21,21 @@ export function updateOrderStatus(ref, status) {
   return client.patch(`/orders/admin/${encodeURIComponent(ref)}/status`, { status });
 }
 
+/** Admin — trigger / resend a specific email for an order. */
+export function sendOrderEmail(ref, type) {
+  return client.post(`/orders/admin/${encodeURIComponent(ref)}/send-email`, { type });
+}
+
+/** Admin — delete an unpaid order (within 2 h of creation). */
+export function deleteOrder(id) {
+  return client.delete(`/orders/admin/${encodeURIComponent(id)}`);
+}
+
+/** Customer — update the shipping address of an unpaid order. */
+export function updateOrderAddress(id, address) {
+  return client.patch(`/orders/${encodeURIComponent(id)}/address`, address);
+}
+
 export function listTransactions(params = {}) {
   return client.get("/transactions", params);
 }

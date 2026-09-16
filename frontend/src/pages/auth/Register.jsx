@@ -41,8 +41,9 @@ export default function Register() {
     if (Object.keys(e).length) return;
     setLoading(true);
     try {
-      await register({ name, email, password });
-      navigate("/account", { replace: true });
+      const result = await register({ name, email, password });
+      const q = result?.emailDelivered === false ? "&emailStatus=failed" : "";
+      navigate(`/verify-email?email=${encodeURIComponent(email)}${q}`, { replace: true });
     } catch (err) {
       setFormError(err.message || "Unable to create account. Please try again.");
     } finally {

@@ -9,7 +9,7 @@ export function LineChart({ data, height = 180, color = "#3b82f6", formatValue =
   const pad = { top: 16, right: 12, bottom: 24, left: 12 };
   const innerW = w - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
-  const max = Math.max(...data.map((d) => d.value)) * 1.1;
+  const max = Math.max(1, ...data.map((d) => d.value)) * 1.1;
   const min = 0;
   const pts = data.map((d, i) => {
     const x = pad.left + (i / (data.length - 1)) * innerW;
@@ -59,7 +59,7 @@ export function BarChart({ data, height = 180, color = "#3b82f6", formatValue = 
   const pad = { top: 16, right: 12, bottom: 24, left: 12 };
   const innerW = w - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
-  const max = Math.max(...data.map((d) => d.value)) * 1.1;
+  const max = Math.max(1, ...data.map((d) => d.value)) * 1.1;
   const barW = (innerW / data.length) * 0.55;
   const gap = innerW / data.length;
 

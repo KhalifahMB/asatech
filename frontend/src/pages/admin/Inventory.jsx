@@ -13,6 +13,7 @@ import { useAsync } from "@/hooks/useAsync";
 import { listProducts } from "@/services/catalogService";
 import { adjustStock } from "@/services/adminService";
 import { CATEGORY_LABELS } from "@/lib/constants";
+import { productImageUrl } from "@/lib/image";
 
 function stockStatus(stock) {
   if (stock <= 0) return "out-of-stock";
@@ -37,7 +38,7 @@ export default function Inventory() {
   };
 
   const save = async () => {
-    await adjustStock(editing.id, Number(qty));
+    await adjustStock(editing._id, Number(qty));
     toast.success("Stock updated", `${editing.name} is now ${qty} units.`);
     setEditing(null);
     window.location.reload();
@@ -69,8 +70,8 @@ export default function Inventory() {
         <Card className="overflow-hidden">
           <ul className="divide-y divide-line">
             {filtered.map((p) => (
-              <li key={p.id} className="flex items-center gap-4 px-4 py-3 sm:px-5">
-                <img src={p.images[0]} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-line object-cover" />
+              <li key={p._id} className="flex items-center gap-4 px-4 py-3 sm:px-5">
+                <img src={productImageUrl(p.images[0])} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-line object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
                   <p className="text-xs text-muted">{CATEGORY_LABELS[p.category]}</p>

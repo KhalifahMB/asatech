@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -18,10 +18,26 @@ import { EmptyState } from "@/components/ui/Feedback";
 import { useCart } from "@/state/CartContext";
 import { useAuth } from "@/state/AuthContext";
 import { formatCurrency } from "@/lib/format";
-import { initializePayment, launchPaystack, loadPaystackScript } from "@/services/paymentService";
+import { productImageUrl } from "@/lib/image";
+import { initializePayment, launchPaystack, loadPaystackScript, verifyPayment } from "@/services/paymentService";
+import { getOrder } from "@/services/orderService";
 
 const SHIPPING_FLAT = 2500;
 const FREE_SHIPPING_THRESHOLD = 500000;
+const CHECKOUT_KEY = "asatech-checkout";
+const POLL_INTERVAL_MS = 3000;
+
+/**
+ * Generate an idempotency key scoped to one checkout attempt. It is persisted
+ * with the checkout session so retries (reload, back button, double-submit)
+ * reuse the same payment session instead of creating duplicate orders.
+ */
+function makeIdempotencyKey() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `ck-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 const STEPS = [
   { key: "review", label: "Review" },
@@ -30,31 +46,73 @@ const STEPS = [
   { key: "confirmation", label: "Confirmation" },
 ];
 
+function loadCheckoutSession() {
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data && data.orderId ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCheckoutSession(data) {
+  try {
+    sessionStorage.setItem(CHECKOUT_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearCheckoutSession() {
+  try {
+    sessionStorage.removeItem(CHECKOUT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function Checkout() {
   const { items, subtotal, clear } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState("review");
-  const [delivery, setDelivery] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: user?.phone || "",
-    line1: "",
-    city: "",
-    state: "",
+  const savedSession = useRef(loadCheckoutSession());
+
+  const [step, setStep] = useState(() => {
+    const s = savedSession.current;
+    return s?.step || "review";
+  });
+  const [delivery, setDelivery] = useState(() => {
+    const s = savedSession.current;
+    return s?.delivery || {
+      name: user?.name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      line1: "",
+      city: "",
+      state: "",
+    };
   });
   const [errors, setErrors] = useState({});
   const [payError, setPayError] = useState("");
   const [paying, setPaying] = useState(false);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(() => {
+    const s = savedSession.current;
+    if (s?.orderId) return { status: "pending-verification", reference: s.reference || null };
+    return null;
+  });
+  const [orderId, setOrderId] = useState(() => savedSession.current?.orderId || null);
+  const pollRef = useRef(null);
 
   const shipping = subtotal === 0 ? 0 : subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT;
   const total = subtotal + shipping;
 
   const stepIndex = useMemo(() => STEPS.findIndex((s) => s.key === step), [step]);
 
-  if (items.length === 0 && step !== "confirmation") {
+  const hasPendingOrder = Boolean(orderId);
+  if (items.length === 0 && step !== "confirmation" && !hasPendingOrder) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-20">
         <EmptyState
@@ -86,27 +144,40 @@ export default function Checkout() {
     setStep("payment");
   };
 
-  /**
-   * Payment is initiated against POST /payments/initialize via paymentService.
-   * There is no mocked success path: if the backend is not configured, the
-   * error is surfaced honestly to the customer.
-   */
   const handlePay = async () => {
     setPaying(true);
     setPayError("");
     try {
       await loadPaystackScript();
-      // The payload/contract below is adaptable to the backend schema.
+      // One idempotency key per checkout attempt — persisted with the session
+      // so a retry reuses the exact same order + Paystack reference.
+      const idempotencyKey =
+        savedSession.current?.idempotencyKey || makeIdempotencyKey();
       const init = await initializePayment({
         email: delivery.email,
-        amount: total, // backend normalises to the unit Paystack expects (kobo)
+        amount: total,
         currency: "NGN",
         items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
         shipping: { name: delivery.name, ...delivery },
+        idempotencyKey,
       });
+
+      const newOrderId = init?.metadata?.orderId;
+      const ref = init?.reference;
+      if (newOrderId) {
+        setOrderId(newOrderId);
+        saveCheckoutSession({
+          orderId: newOrderId,
+          reference: ref,
+          step: "confirmation",
+          delivery,
+          idempotencyKey,
+        });
+      }
 
       launchPaystack(
         {
+          key: init?.publicKey,
           email: delivery.email,
           amount: init?.amount ?? total * 100,
           reference: init?.reference,
@@ -115,10 +186,17 @@ export default function Checkout() {
         },
         {
           onSuccess: (response) => {
-            // Paystack finished; VERIFICATION is the backend's responsibility.
-            // The frontend waits for the backend to return a final order state.
+            setPaying(false);
             setResult({ status: "pending-verification", reference: response?.reference });
             setStep("confirmation");
+            if (newOrderId)
+              saveCheckoutSession({
+                orderId: newOrderId,
+                reference: response?.reference,
+                step: "confirmation",
+                delivery,
+                idempotencyKey,
+              });
           },
           onClose: () => {
             setPaying(false);
@@ -141,8 +219,102 @@ export default function Checkout() {
     }
   };
 
+  // ── Poll backend for payment status ──────────────────────────────────
+  // Prefers the on-demand verify endpoint so a payment that succeeded on
+  // Paystack is reconciled server-side even if the webhook never arrived.
+  // Falls back to reading the order directly when no reference is available.
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (result?.status !== "pending-verification") {
+      return undefined;
+    }
+
+    const reference = result?.reference;
+    if (!reference) {
+      // No Paystack reference — fall back to checking the order status directly
+      if (!orderId) return undefined;
+
+      let cancelled = false;
+      pollRef.current = setInterval(async () => {
+        try {
+          const order = await getOrder(orderId);
+          if (cancelled) return;
+
+          if (order?.paymentStatus === "paid") {
+            stopPolling();
+            setResult({ status: "confirmed", reference: order.paymentRef });
+            clearCheckoutSession();
+            clear();
+          } else if (order?.paymentStatus === "failed" || order?.paymentStatus === "cancelled") {
+            stopPolling();
+            setResult({ status: "failed", reference: order.paymentRef });
+            clearCheckoutSession();
+          }
+        } catch (err) {
+          if (err?.status === 404) {
+            stopPolling();
+            setResult({ status: "failed", reference: null });
+            clearCheckoutSession();
+          }
+        }
+      }, POLL_INTERVAL_MS);
+
+      return () => {
+        cancelled = true;
+        stopPolling();
+      };
+    }
+
+    let cancelled = false;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await verifyPayment(reference);
+        if (cancelled) return;
+
+        const transactionStatus = res?.transactionStatus;
+        const paymentStatus = res?.paymentStatus;
+
+        if (transactionStatus === "successful" || paymentStatus === "paid") {
+          stopPolling();
+          setResult({ status: "confirmed", reference: res?.reference || reference });
+          clearCheckoutSession();
+          clear();
+        } else if (
+          transactionStatus === "failed" ||
+          paymentStatus === "failed" ||
+          paymentStatus === "cancelled"
+        ) {
+          stopPolling();
+          setResult({ status: "failed", reference: res?.reference || reference });
+          clearCheckoutSession();
+        }
+      } catch (err) {
+        if (err?.status === 404) {
+          stopPolling();
+          setResult({ status: "failed", reference });
+          clearCheckoutSession();
+        }
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [result?.status, result?.reference, orderId, clear, stopPolling]);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
   const finish = () => {
-    clear();
+    clearCheckoutSession();
+    if (items.length > 0) clear();
     navigate("/account/orders");
   };
 
@@ -150,7 +322,6 @@ export default function Checkout() {
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <h1 className="text-2xl font-bold tracking-tight text-ink">Checkout</h1>
 
-      {/* Stepper */}
       <ol className="mt-6 flex items-center gap-2">
         {STEPS.map((s, i) => (
           <li key={s.key} className="flex flex-1 items-center gap-2">
@@ -179,12 +350,11 @@ export default function Checkout() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
         <div>
-          {/* Step 1 — Review */}
           {step === "review" && (
             <Card className="divide-y divide-line">
               {items.map((i) => (
                 <div key={i.productId} className="flex items-center gap-4 p-4">
-                  <img src={i.image} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                  <img src={productImageUrl(i.image)} alt="" className="h-14 w-14 rounded-lg object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-ink">{i.name}</p>
                     <p className="text-xs text-muted">Qty {i.quantity}</p>
@@ -202,7 +372,6 @@ export default function Checkout() {
             </Card>
           )}
 
-          {/* Step 2 — Delivery */}
           {step === "delivery" && (
             <Card className="p-5">
               <h2 className="text-base font-semibold text-ink">Delivery information</h2>
@@ -266,12 +435,11 @@ export default function Checkout() {
             </Card>
           )}
 
-          {/* Step 3 — Payment */}
           {step === "payment" && (
             <Card className="p-5">
               <h2 className="text-base font-semibold text-ink">Payment</h2>
               <p className="mt-1 text-sm text-muted">
-                You’ll be redirected to a secure Paystack checkout to complete your purchase.
+                You'll be redirected to a secure Paystack checkout to complete your purchase.
               </p>
 
               {payError && (
@@ -286,7 +454,7 @@ export default function Checkout() {
                   <CreditCard className="h-4 w-4 text-brand-500" /> Pay with Paystack
                 </div>
                 <p className="text-xs text-muted">
-                  Amount: <span className="font-semibold text-ink">{formatCurrency(total)}</span> ·
+                  Amount: <span className="font-semibold text-ink">{formatCurrency(total)}</span> ·{" "}
                   {delivery.email}
                 </p>
               </div>
@@ -307,40 +475,66 @@ export default function Checkout() {
             </Card>
           )}
 
-          {/* Step 4 — Confirmation */}
           {step === "confirmation" && (
             <Card className="p-6 text-center">
-              {result?.status === "pending-verification" ? (
+              {result?.status === "pending-verification" && (
                 <>
                   <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-500/10 text-brand-500">
                     <Loader2 className="h-7 w-7 animate-spin" />
                   </span>
-                  <h2 className="mt-5 text-xl font-bold text-ink">Payment received</h2>
+                  <h2 className="mt-5 text-xl font-bold text-ink">Verifying payment</h2>
                   <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-                    Your payment is being verified. Order confirmation happens on the backend once
-                    verification completes.
+                    We're confirming your payment with Paystack. This usually takes a few seconds.
+                    You can safely stay on this page.
                   </p>
                 </>
-              ) : (
+              )}
+
+              {result?.status === "confirmed" && (
                 <>
                   <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
                     <CheckCircle2 className="h-7 w-7" />
                   </span>
                   <h2 className="mt-5 text-xl font-bold text-ink">Order confirmed</h2>
                   <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-                    Thank you for your order. A confirmation with your order reference will be sent
-                    to {delivery.email}.
+                    Thank you for your order. A confirmation email has been sent to {delivery.email}.
                   </p>
                 </>
               )}
-              <Button onClick={finish} className="mt-6">
-                View my orders
-              </Button>
+
+              {result?.status === "failed" && (
+                <>
+                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+                    <XCircle className="h-7 w-7" />
+                  </span>
+                  <h2 className="mt-5 text-xl font-bold text-ink">Payment not completed</h2>
+                  <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
+                    We couldn't verify your payment. Your cart items are still saved. You can retry
+                    or contact support if you were charged.
+                  </p>
+                </>
+              )}
+
+              <div className="mt-6 flex justify-center gap-3">
+                {result?.status === "failed" ? (
+                  <>
+                    <Button onClick={() => { setResult(null); setStep("payment"); }} icon={ArrowLeft}>
+                      Retry payment
+                    </Button>
+                    <Button variant="ghost" to="/account/orders">
+                      View orders
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={finish} disabled={result?.status === "pending-verification"}>
+                    {result?.status === "pending-verification" ? "Processing..." : "View my orders"}
+                  </Button>
+                )}
+              </div>
             </Card>
           )}
         </div>
 
-        {/* Order summary */}
         <div>
           <Card className="sticky top-20 p-5">
             <h3 className="text-base font-semibold text-ink">Summary</h3>

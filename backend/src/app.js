@@ -29,6 +29,9 @@ import adminProductRoutes from './routes/adminProducts.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Product image files live here and are served with aggressive caching
+const imagesDir = path.join(__dirname, 'assets', 'images');
+
 // Connect to database
 connectDB();
 
@@ -91,6 +94,23 @@ app.use(hpp());
 
 // ─── Compression ───────────────────────────────────────────────────────────
 app.use(compression());
+
+// ─── Static image assets ───────────────────────────────────────────────────
+// Product images are served from the backend so they no longer ship with the
+// frontend bundle. Cache headers keep browsers fetching each image once.
+app.use(
+  `/api/${config.apiVersion}/images`,
+  express.static(imagesDir, {
+    etag: true,
+    lastModified: true,
+    maxAge: '30d',
+    immutable: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
+  }),
+);
 
 // ─── Logging ───────────────────────────────────────────────────────────────
 if (config.nodeEnv === 'development') {

@@ -191,3 +191,37 @@ export const deleteProduct = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @desc    Migrate legacy `/images/...` product image paths to bare filenames
+ * @route   POST /api/v1/admin/products/migrate-images
+ * @access  Private/Admin
+ */
+export const migrateProductImages = async (req, res, next) => {
+  try {
+    const products = await Product.find({ images: /^\/images\// });
+    let migrated = 0;
+    for (const product of products) {
+      const before = product.images;
+      product.images = product.images.map((img) =>
+        typeof img === 'string' ? img.replace(/^\/images\//, '') : img
+      );
+      if (JSON.stringify(product.images) !== JSON.stringify(before)) {
+        product.markModified('images');
+        await product.save();
+        migrated += 1;
+      }
+    }
+
+    res.json({
+      success: true,
+      migrated,
+      message:
+        migrated > 0
+          ? `Updated image paths for ${migrated} product(s)`
+          : 'No legacy image paths found',
+    });
+  } catch (error) {
+    next(error);
+  }
+};

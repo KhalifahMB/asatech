@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Surfaces";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -11,9 +11,10 @@ import { SelectField } from "@/components/ui/Field";
 import { useToast } from "@/state/ToastContext";
 import { useAsync } from "@/hooks/useAsync";
 import { listProducts } from "@/services/catalogService";
-import { deleteProduct } from "@/services/adminService";
+import { deleteProduct, migrateProductImages } from "@/services/adminService";
 import { CATEGORIES } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
+import { productImageUrl } from "@/lib/image";
 
 function stockStatus(stock) {
   if (stock <= 0) return "out-of-stock";
@@ -28,6 +29,7 @@ export default function Products() {
   const [category, setCategory] = useState("all");
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [migrating, setMigrating] = useState(false);
 
   const filtered = (products || []).filter((p) => {
     if (category !== "all" && p.category !== category) return false;
@@ -37,12 +39,25 @@ export default function Products() {
 
   const confirmDelete = async () => {
     setDeleting(true);
-    await deleteProduct(toDelete.id);
+    await deleteProduct(toDelete._id);
     setDeleting(false);
     setToDelete(null);
     toast.success("Product deleted");
     // Refresh list (demo store mutation is reflected on next load).
     window.location.reload();
+  };
+
+  const handleMigrateImages = async () => {
+    setMigrating(true);
+    try {
+      const res = await migrateProductImages();
+      toast.success(res?.message || "Image paths migrated");
+      window.location.reload();
+    } catch (err) {
+      toast.error(err?.message || "Image migration failed");
+    } finally {
+      setMigrating(false);
+    }
   };
 
   return (
@@ -51,9 +66,14 @@ export default function Products() {
         title="Products"
         subtitle="Manage your product catalogue."
         actions={
-          <Button to="/admin/products/new" icon={Plus}>
-            Add product
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" onClick={handleMigrateImages} loading={migrating} icon={ImageOff}>
+              Migrate image paths
+            </Button>
+            <Button to="/admin/products/new" icon={Plus}>
+              Add product
+            </Button>
+          </div>
         }
       />
 
@@ -89,8 +109,8 @@ export default function Products() {
         <Card className="overflow-hidden">
           <ul className="divide-y divide-line">
             {filtered.map((p) => (
-              <li key={p.id} className="flex items-center gap-4 px-4 py-3 sm:px-5">
-                <img src={p.images[0]} alt="" className="h-12 w-12 shrink-0 rounded-lg border border-line object-cover" />
+              <li key={p._id} className="flex items-center gap-4 px-4 py-3 sm:px-5">
+                <img src={productImageUrl(p.images[0])} alt="" className="h-12 w-12 shrink-0 rounded-lg border border-line object-cover" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
                   <p className="text-xs capitalize text-muted">{p.category}</p>
@@ -102,7 +122,7 @@ export default function Products() {
                 <StatusBadge status={stockStatus(p.stock)} dot />
                 <div className="flex items-center gap-1">
                   <Link
-                    to={`/admin/products/${p.id}/edit`}
+                    to={`/admin/products/${p._id}/edit`}
                     aria-label={`Edit ${p.name}`}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-raised hover:text-ink"
                   >

@@ -11,13 +11,19 @@
     "seed:demo": "node scripts/seed.js --demo",
     "lint": "eslint src/"
   },
-  "keywords": ["ecommerce", "express", "mongodb", "paystack"],
+  "keywords": [
+    "ecommerce",
+    "express",
+    "mongodb",
+    "paystack"
+  ],
   "author": "ASATECH",
   "license": "PROPRIETARY",
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^6.0.3",
     "axios": "^1.6.7",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
@@ -32,6 +38,7 @@
     "mongoose": "^8.2.0",
     "morgan": "^1.10.0",
     "nodemailer": "^6.9.11",
+    "nunjucks": "^3.2.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "validator": "^13.11.0",

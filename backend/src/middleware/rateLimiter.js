@@ -9,7 +9,8 @@ const jsonMessage = (message, code) => ({
 
 /**
  * General API rate limiter.
- * Skips /health checks so uptime monitors don't blow the limit.
+ * Skips /health checks and image asset requests (browsers fetch many images)
+ * so uptime monitors and the storefront don't blow the limit.
  */
 export const apiLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
@@ -17,7 +18,7 @@ export const apiLimiter = rateLimit({
   message: jsonMessage('Too many requests, please try again later', 'RATE_LIMIT_EXCEEDED'),
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === '/health',
+  skip: (req) => req.path === '/health' || req.path.startsWith('/images'),
   handler: (req, res, _next, options) => {
     logger.warn('Rate limit exceeded', { ip: req.ip, path: req.path });
     res.status(options.statusCode).json(options.message);

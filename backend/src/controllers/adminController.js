@@ -4,7 +4,10 @@ import Transaction from '../models/Transaction.js';
 import Product from '../models/Product.js';
 import FraudAlert from '../models/FraudAlert.js';
 import AuditLog from '../models/AuditLog.js';
-import { audit } from '../middleware/audit.js';
+import config from '../config/index.js';
+import ErrorResponse from '../utils/errorResponse.js';
+import { demoProducts } from '../data/demoProducts.js';
+import { audit, logAudit } from '../middleware/audit.js';
 
 /**
  * @desc    Get all customers (admin only)
@@ -279,6 +282,89 @@ export const getAnalytics = async (req, res, next) => {
           label: c._id || 'Other',
           value: c.count,
         })),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Seed the default admin + demo catalogue (admin only, opt-in)
+ * @route   POST /api/v1/admin/maintenance/seed-demo
+ * @access  Private/Admin
+ *
+ * Mirrors `npm run seed` from the dashboard. Requires `{ confirm: true }` to
+ * run. Only creates resources that don't already exist — an existing admin or
+ * catalogue is left untouched.
+ */
+export const seedDemoData = async (req, res, next) => {
+  try {
+    if (!req.body?.confirm) {
+      return next(
+        ErrorResponse.badRequest(
+          'This action creates an admin account and demo products. Pass { confirm: true } to proceed.'
+        )
+      );
+    }
+
+    if (!config.admin.password) {
+      return next(
+        ErrorResponse.internal(
+          'ADMIN_PASSWORD is not configured on the server. Add it to the backend .env to seed the default admin.'
+        )
+      );
+    }
+
+    const existingAdmin = await User.findOne({ role: 'admin' });
+    let adminCreated = false;
+    if (!existingAdmin) {
+      try {
+        await User.create({
+          name: 'ASATECH Admin',
+          email: config.admin.email,
+          password: config.admin.password,
+          role: 'admin',
+          phone: '+2348000000000',
+          emailVerified: true,
+        });
+        adminCreated = true;
+      } catch (error) {
+        return next(
+          ErrorResponse.internal(`Failed to create the admin account: ${error.message}`)
+        );
+      }
+    }
+
+    const existingProducts = await Product.countDocuments();
+    let productsSeeded = 0;
+    if (existingProducts === 0) {
+      await Product.insertMany(demoProducts);
+      productsSeeded = demoProducts.length;
+    }
+
+    await logAudit({
+      actor: req.user.email,
+      actorId: req.user._id,
+      actorRole: req.user.role,
+      action: 'Demo data seeded',
+      resource: 'Maintenance:seed-demo',
+      resourceId: req.user._id,
+      status: 'success',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.json({
+      success: true,
+      data: {
+        adminCreated,
+        adminEmail: config.admin.email,
+        productsSeeded,
+        message:
+          adminCreated || productsSeeded > 0
+            ? 'Demo data seeded successfully'
+            : 'Demo data already present — nothing was changed',
       },
     });
   } catch (error) {
