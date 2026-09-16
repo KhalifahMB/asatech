@@ -6,7 +6,7 @@ import FraudAlert from '../models/FraudAlert.js';
 import AuditLog from '../models/AuditLog.js';
 import config from '../config/index.js';
 import ErrorResponse from '../utils/errorResponse.js';
-import { demoProducts } from '../data/demoProducts.js';
+import { sampleProducts } from '../data/sampleProducts.js';
 import { audit, logAudit } from '../middleware/audit.js';
 
 /**
@@ -290,20 +290,20 @@ export const getAnalytics = async (req, res, next) => {
 };
 
 /**
- * @desc    Seed the default admin + demo catalogue (admin only, opt-in)
- * @route   POST /api/v1/admin/maintenance/seed-demo
+ * @desc    Seed the default admin + sample catalogue (admin only, opt-in)
+ * @route   POST /api/v1/admin/maintenance/seed-catalogue
  * @access  Private/Admin
  *
  * Mirrors `npm run seed` from the dashboard. Requires `{ confirm: true }` to
  * run. Only creates resources that don't already exist — an existing admin or
  * catalogue is left untouched.
  */
-export const seedDemoData = async (req, res, next) => {
+export const seedCatalogue = async (req, res, next) => {
   try {
     if (!req.body?.confirm) {
       return next(
         ErrorResponse.badRequest(
-          'This action creates an admin account and demo products. Pass { confirm: true } to proceed.'
+          'This action creates an admin account and sample products. Pass { confirm: true } to proceed.'
         )
       );
     }
@@ -339,16 +339,16 @@ export const seedDemoData = async (req, res, next) => {
     const existingProducts = await Product.countDocuments();
     let productsSeeded = 0;
     if (existingProducts === 0) {
-      await Product.insertMany(demoProducts);
-      productsSeeded = demoProducts.length;
+      await Product.insertMany(sampleProducts);
+      productsSeeded = sampleProducts.length;
     }
 
     await logAudit({
       actor: req.user.email,
       actorId: req.user._id,
       actorRole: req.user.role,
-      action: 'Demo data seeded',
-      resource: 'Maintenance:seed-demo',
+      action: 'Catalogue seeded',
+      resource: 'Maintenance:seed-catalogue',
       resourceId: req.user._id,
       status: 'success',
       ipAddress: req.ip,
@@ -363,8 +363,8 @@ export const seedDemoData = async (req, res, next) => {
         productsSeeded,
         message:
           adminCreated || productsSeeded > 0
-            ? 'Demo data seeded successfully'
-            : 'Demo data already present — nothing was changed',
+            ? 'Sample catalogue seeded successfully'
+            : 'Sample catalogue already present — nothing was changed',
       },
     });
   } catch (error) {

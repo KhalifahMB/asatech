@@ -92,10 +92,6 @@ export default function Login() {
           Create an account
         </Link>
       </p>
-
-      <p className="mt-6 rounded-lg border border-line bg-raised px-3 py-2 text-center text-xs text-faint">
-        Demo: sign in with any email. Use an email containing “admin” to open the admin console.
-      </p>
     </div>
   );
 }

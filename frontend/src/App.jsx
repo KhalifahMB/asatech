@@ -7,7 +7,7 @@ import CustomerLayout from "./layouts/CustomerLayout";
 import AdminLayout from "./layouts/AdminLayout";
 
 // Guards + utilities
-import { RequireAuth, RequireAdmin } from "./components/guards";
+import { RequireAuth, RequireAdmin, RequireGuest } from "./components/guards";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import ScrollToTop from "./components/ScrollToTop";
 
@@ -69,8 +69,8 @@ export default function App() {
             <Route path="/payment/:orderId/success" element={<RequireAuth><PaymentSuccess /></RequireAuth>} />
           </Route>
 
-          {/* Authentication */}
-          <Route element={<AuthLayout />}>
+          {/* Authentication — guests only */}
+          <Route element={<RequireGuest><AuthLayout /></RequireGuest>}>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -31,6 +31,19 @@ export function RequireAdmin({ children }) {
   return children;
 }
 
+/**
+ * Guest-only pages (login, register, password reset…). Authenticated users
+ * are sent straight to their home area.
+ */
+export function RequireGuest({ children }) {
+  const { isAuthenticated, isAdmin } = useAuth();
+
+  if (isAuthenticated) {
+    return <Navigate to={isAdmin ? "/admin" : "/account"} replace />;
+  }
+  return children;
+}
+
 export function AuthLoadingGate({ children }) {
   // Auth state is read synchronously from localStorage on startup, so there is
   // no async "loading" phase today. Kept as a hook point for a real JWT decode.

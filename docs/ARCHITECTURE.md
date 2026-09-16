@@ -9,7 +9,7 @@ This document describes the frontend architecture of the ASATECH e-commerce plat
 1. **Component-Based**: Reusable, composable UI components
 2. **Service Layer**: All API calls isolated in dedicated service modules
 3. **State Colocation**: State kept as close to where it's used as possible
-4. **Progressive Enhancement**: Works offline (demo mode), enhances with backend
+4. **Progressive Enhancement**: Degrades gracefully without the backend
 5. **Security First**: No secrets in frontend, backend enforces all authorization
 
 ## Technology Stack
@@ -55,7 +55,7 @@ src/
 │
 ├── layouts/              # Page layout shells
 │   ├── StorefrontLayout.jsx  # Public storefront (navbar, footer)
-│   ├── AuthLayout.jsx        # Authentication pages (split layout)
+│   ├── AuthLayout.jsx        # Authentication pages (centered layout)
 │   ├── CustomerLayout.jsx    # Customer dashboard (sidebar navigation)
 │   └── AdminLayout.jsx       # Admin console (sidebar with fraud badge)
 │

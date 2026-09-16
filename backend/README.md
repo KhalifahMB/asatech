@@ -76,14 +76,8 @@ npm run seed
 ```
 
 Creates:
-- Admin user (admin@asatech.ng)
-- Product categories
-- Sample products (optional with --demo flag)
-
-### Seed with Demo Products
-```bash
-npm run seed:demo
-```
+- Admin user (configured via `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`)
+- Sample product catalogue
 
 ## Environment Variables
 
@@ -96,7 +90,7 @@ See `.env.example` for all configuration options.
 - `PAYSTACK_PUBLIC_KEY` - Paystack public key
 
 **Optional:**
-- `EMAIL_*` - SMTP credentials for email notifications
+- `BREVO_API_KEY` / `BREVO_SENDER_EMAIL`/`BREVO_SENDER_NAME` — transactional email (Brevo). Required in production.
 - `FRONTEND_URL` - Frontend application URL (CORS)
 
 ## API Endpoints

@@ -8,7 +8,6 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "seed": "node scripts/seed.js",
-    "seed:demo": "node scripts/seed.js --demo",
     "lint": "eslint src/"
   },
   "keywords": [

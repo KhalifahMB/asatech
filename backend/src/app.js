@@ -8,9 +8,9 @@ import hpp from 'hpp';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import swaggerUi from 'swagger-ui-express';
-import swaggerJsdoc from 'swagger-jsdoc';
 
 import config from './config/index.js';
+import swaggerSpec from './config/swagger.js';
 import connectDB from './config/database.js';
 import logger from './utils/logger.js';
 import errorHandler from './middleware/errorHandler.js';

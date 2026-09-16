@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import User from '../src/models/User.js';
 import Product from '../src/models/Product.js';
 import config from '../src/config/index.js';
-import { demoProducts } from '../src/data/demoProducts.js';
+import { sampleProducts } from '../src/data/sampleProducts.js';
 
 dotenv.config();
 
@@ -40,9 +40,9 @@ async function seedDatabase() {
     if (existingProducts > 0) {
       console.log('⚠️  Products already exist. Skipping product seeding.');
     } else {
-      // Seed demo products
-      await Product.insertMany(demoProducts);
-      console.log(`✅ Seeded ${demoProducts.length} demo products`);
+      // Seed the sample catalogue
+      await Product.insertMany(sampleProducts);
+      console.log(`✅ Seeded ${sampleProducts.length} sample products`);
     }
 
     console.log('\n🎉 Database seeding completed!');

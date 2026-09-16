@@ -54,9 +54,9 @@ export function migrateProductImages() {
 }
 
 /**
- * Seed the default admin + demo catalogue (only if they don't exist yet).
- * Requires an explicit confirm flag.
+ * Seed the default admin account and sample product catalogue (only if they
+ * don't exist yet). Requires an explicit confirm flag.
  */
-export function seedDemoData() {
-  return client.post("/admin/maintenance/seed-demo", { confirm: true });
+export function seedCatalogue() {
+  return client.post("/admin/maintenance/seed-catalogue", { confirm: true });
 }

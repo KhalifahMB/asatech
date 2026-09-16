@@ -9,7 +9,7 @@ import { EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { SelectField } from "@/components/ui/Field";
 import { useToast } from "@/state/ToastContext";
 import { useAsync } from "@/hooks/useAsync";
-import { listTransactions } from "@/services/orderService";
+import { listAllTransactions } from "@/services/orderService";
 import { syncTransactions } from "@/services/adminService";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
@@ -32,7 +32,7 @@ async function runSync({ onStart, onDone, onError }) {
 export default function AdminTransactions() {
   const toast = useToast();
   const [version, setVersion] = useState(0);
-  const { data: txs, loading } = useAsync(() => listTransactions({}), [version]);
+  const { data: txs, loading } = useAsync(() => listAllTransactions({}), [version]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [syncing, setSyncing] = useState(false);

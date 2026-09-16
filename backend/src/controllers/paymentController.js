@@ -142,7 +142,7 @@ export const initializePayment = async (req, res, next) => {
           orderRef: order.ref,
           customerId: req.user._id.toString(),
         }),
-        callback_url: `${config.frontendUrl}/#/payment/${order._id}/success`,
+        callback_url: `${config.frontendUrl}/payment/${order._id}/success`,
       });
     } catch (err) {
       // Roll back the order since payment could not be initialised

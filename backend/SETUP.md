@@ -52,15 +52,13 @@ mongodb+srv://<username>:<password>@cluster.mongodb.net/asatech?retryWrites=true
 ### 4. Seed Database
 
 ```bash
-# Create admin user and demo products
+# Create admin user and sample catalogue
 npm run seed
 ```
 
 **Default Admin Credentials:**
-- Email: `admin@asatech.ng`
-- Password: `As@Tech2026!SecureAdmin#`
-
-⚠️ **Change the admin password immediately in production!**
+- Email: `admin@asatech.ng` (override with `ADMIN_EMAIL`)
+- Password: set `ADMIN_PASSWORD` in `backend/.env`
 
 ### 5. Start Server
 

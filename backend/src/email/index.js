@@ -196,7 +196,7 @@ class EmailService {
       template: 'fraud-alert.njk',
       context: {
         alert,
-        reviewUrl: `${config.frontendUrl}/#/admin/fraud-alerts/${alert._id}`,
+        reviewUrl: `${config.frontendUrl}/admin/fraud-alerts/${alert._id}`,
       },
     });
   }

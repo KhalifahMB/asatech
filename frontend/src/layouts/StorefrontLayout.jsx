@@ -138,15 +138,6 @@ const FOOTER_COLS = [
     links: CATEGORIES.slice(0, 5).map((c) => ({ label: c.label, to: `/products?category=${c.id}` })),
   },
   {
-    title: "Account",
-    links: [
-      { label: "Sign in", to: "/login" },
-      { label: "Create account", to: "/register" },
-      { label: "My orders", to: "/account/orders" },
-      { label: "Wishlist", to: "/account/wishlist" },
-    ],
-  },
-  {
     title: "Company",
     links: [
       { label: "About", to: "/products" },
@@ -156,9 +147,39 @@ const FOOTER_COLS = [
   },
 ];
 
+function accountLinks(user) {
+  if (user) {
+    const home = user.role === "admin" ? "/admin" : "/account";
+    return [
+      { label: user.role === "admin" ? "Admin console" : "My account", to: home },
+      { label: "My orders", to: "/account/orders" },
+      { label: "Wishlist", to: "/account/wishlist" },
+      { label: "Sign out", signOut: true },
+    ];
+  }
+  return [
+    { label: "Sign in", to: "/login" },
+    { label: "Create account", to: "/register" },
+    { label: "My orders", to: "/account/orders" },
+    { label: "Wishlist", to: "/account/wishlist" },
+  ];
+}
+
 export default function StorefrontLayout() {
   const navigate = useNavigate();
   const [anchor, setAnchor] = useState(null);
+  const { user, logout } = useAuth();
+
+  const handleSignOut = async () => {
+    await logout();
+    navigate("/");
+  };
+
+  const columns = [
+    FOOTER_COLS[0],
+    { title: "Account", links: accountLinks(user) },
+    FOOTER_COLS[1],
+  ];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -201,15 +222,24 @@ export default function StorefrontLayout() {
               trust, delivered anywhere.
             </p>
           </div>
-          {FOOTER_COLS.map((col) => (
+          {columns.map((col) => (
             <div key={col.title}>
               <h4 className="text-sm font-semibold text-ink">{col.title}</h4>
               <ul className="mt-4 space-y-2.5">
                 {col.links.map((l) => (
                   <li key={l.label}>
-                    <Link to={l.to} className="text-sm text-muted transition hover:text-ink">
-                      {l.label}
-                    </Link>
+                    {l.signOut ? (
+                      <button
+                        onClick={handleSignOut}
+                        className="text-sm text-muted transition hover:text-ink"
+                      >
+                        {l.label}
+                      </button>
+                    ) : (
+                      <Link to={l.to} className="text-sm text-muted transition hover:text-ink">
+                        {l.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

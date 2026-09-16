@@ -43,7 +43,7 @@ export default function Products() {
     setDeleting(false);
     setToDelete(null);
     toast.success("Product deleted");
-    // Refresh list (demo store mutation is reflected on next load).
+    // Refresh list (the store mutation is reflected on next load).
     window.location.reload();
   };
 

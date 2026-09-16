@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { Save } from "lucide-react";
+import { Save, RefreshCw, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Surfaces";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { TextField } from "@/components/ui/Field";
 import { useToast } from "@/state/ToastContext";
 import { useAuth } from "@/state/AuthContext";
+import {
+  syncTransactions,
+  migrateProductImages,
+} from "@/services/adminService";
 
 function Toggle({ label, desc, value, onChange }) {
   return (
@@ -26,6 +30,25 @@ function Toggle({ label, desc, value, onChange }) {
   );
 }
 
+function OpsRow({ icon: Icon, title, desc, busy, onRun, actionLabel }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-raised text-muted">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-medium text-ink">{title}</p>
+          <p className="text-sm text-muted">{desc}</p>
+        </div>
+      </div>
+      <Button variant="secondary" size="sm" onClick={onRun} loading={busy}>
+        {actionLabel}
+      </Button>
+    </div>
+  );
+}
+
 export default function Settings() {
   const toast = useToast();
   const { user } = useAuth();
@@ -38,12 +61,44 @@ export default function Settings() {
   });
   const [saving, setSaving] = useState(false);
 
+  // Maintenance / ops states
+  const [syncing, setSyncing] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [syncSummary, setSyncSummary] = useState(null);
+
   const save = () => {
     setSaving(true);
     setTimeout(() => {
       setSaving(false);
       toast.success("Settings saved");
     }, 600);
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await syncTransactions();
+      setSyncSummary(res);
+      toast.success(
+        `Reconciled ${res.scanned ?? 0} — ${res.successful ?? 0} settled, ${res.failed ?? 0} failed`
+      );
+    } catch (err) {
+      toast.error(err?.message || "Reconciliation failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleMigrateImages = async () => {
+    setMigrating(true);
+    try {
+      const res = await migrateProductImages();
+      toast.success(res?.message || "Image paths migrated");
+    } catch (err) {
+      toast.error(err?.message || "Image migration failed");
+    } finally {
+      setMigrating(false);
+    }
   };
 
   return (
@@ -76,6 +131,38 @@ export default function Settings() {
           <Toggle label="Low stock alerts" desc="Notify me when a product is running low." value={prefs.lowStock} onChange={(v) => setPrefs((p) => ({ ...p, lowStock: v }))} />
           <Toggle label="Failed payments" desc="Notify me when a payment fails." value={prefs.failedPayment} onChange={(v) => setPrefs((p) => ({ ...p, failedPayment: v }))} />
           <Toggle label="Daily digest" desc="A daily summary of sales and risk." value={prefs.dailyDigest} onChange={(v) => setPrefs((p) => ({ ...p, dailyDigest: v }))} />
+        </div>
+      </Card>
+
+      <Card className="p-5 sm:p-6">
+        <SectionHeader
+          title="Maintenance & ops"
+          subtitle="Run admin maintenance tasks from the dashboard — no terminal required."
+        />
+        {syncSummary && (
+          <p className="mt-3 rounded-lg border border-line bg-raised px-3 py-2 text-xs text-muted">
+            Last reconciliation — scanned {syncSummary.scanned ?? 0}, settled{" "}
+            {syncSummary.successful ?? 0}, failed {syncSummary.failed ?? 0}, errors{" "}
+            {syncSummary.errors ?? 0}.
+          </p>
+        )}
+        <div className="mt-3 divide-y divide-line">
+          <OpsRow
+            icon={RefreshCw}
+            title="Reconcile payments"
+            desc="Verify every pending transaction with Paystack and settle or fail it. Fixes payments stuck on Pending."
+            busy={syncing}
+            actionLabel="Run"
+            onRun={handleSync}
+          />
+          <OpsRow
+            icon={ImageOff}
+            title="Migrate product image paths"
+            desc="Convert legacy /images/… paths to the current backend image endpoint."
+            busy={migrating}
+            actionLabel="Run"
+            onRun={handleMigrateImages}
+          />
         </div>
       </Card>
 
