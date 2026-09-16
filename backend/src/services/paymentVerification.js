@@ -1,6 +1,7 @@
 import axios from 'axios';
 import config from '../config/index.js';
 import Order from '../models/Order.js';
+import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import FraudAlert from '../models/FraudAlert.js';
 import Product from '../models/Product.js';
@@ -111,8 +112,8 @@ export async function settleSuccessfulPayment(transaction, verification) {
     { new: true },
   );
 
-  // All order side-effects (stock decrement, confirmation email) happen only
-  // on the path that actually flips the order from unpaid → paid.
+  // All order side-effects (stock decrement, confirmation email, address
+  // persistence) happen only on the path that flips unpaid → paid.
   if (order) {
     await Promise.all(
       order.items.map((item) =>
@@ -126,6 +127,45 @@ export async function settleSuccessfulPayment(transaction, verification) {
         orderRef: order.ref,
         error: err.message,
       });
+    }
+
+    // Auto-save order shipping address into the user's address book so the
+    // address appears on the profile page and can be reused at checkout.
+    const addr = order.shippingAddress;
+    if (order.customerId && addr?.line1 && addr?.city && addr?.state) {
+      try {
+        const user = await User.findById(order.customerId).select('addresses');
+        if (user) {
+          const isDupe = user.addresses.some(
+            (a) =>
+              a.line1?.toLowerCase() === addr.line1?.toLowerCase() &&
+              a.city?.toLowerCase() === addr.city?.toLowerCase() &&
+              a.state?.toLowerCase() === addr.state?.toLowerCase() &&
+              a.phone === addr.phone,
+          );
+          if (!isDupe) {
+            if (user.addresses.length === 0) {
+              user.addresses.forEach((a) => { a.default = false; });
+            }
+            user.addresses.push({
+              label: 'Home',
+              name: addr.name || order.customerName,
+              line1: addr.line1,
+              line2: addr.line2 || '',
+              city: addr.city,
+              state: addr.state,
+              phone: addr.phone || '',
+              default: user.addresses.length === 0,
+            });
+            await user.save({ validateBeforeSave: false });
+          }
+        }
+      } catch (err) {
+        auditLogger.error('Failed to auto-save address', {
+          orderRef: order.ref,
+          error: err.message,
+        });
+      }
     }
   }
 

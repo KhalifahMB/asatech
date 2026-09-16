@@ -130,6 +130,33 @@ export const getAllOrders = async (req, res, next) => {
 };
 
 /**
+ * Allowed order-status transitions keyed by payment status. Every key is the
+ * current orderStatus; the value is the set of statuses that may follow.
+ * - Paid orders may only advance forward (processing → shipped → delivered).
+ * - Unpaid orders may move through earlier stages or be cancelled.
+ */
+const STATUS_TRANSITIONS = {
+  pending: {
+    unpaid: ['processing', 'confirmed', 'cancelled'],
+    paid:   ['processing'],
+  },
+  processing: {
+    unpaid: ['confirmed', 'cancelled'],
+    paid:   ['shipped', 'delivered'],
+  },
+  confirmed: {
+    unpaid: ['processing', 'cancelled'],
+    paid:   ['shipped', 'delivered'],
+  },
+  shipped: {
+    unpaid: ['delivered'],
+    paid:   ['delivered'],
+  },
+  delivered: {},
+  cancelled: {},
+};
+
+/**
  * @desc    Update order status (admin only)
  * @route   PATCH /api/v1/admin/orders/:id/status
  * @access  Private/Admin
@@ -142,15 +169,27 @@ export const updateOrderStatus = async (req, res, next) => {
       return next(ErrorResponse.badRequest('Status is required'));
     }
 
-    const order = await Order.findOneAndUpdate(
-      orderParamQuery(req.params.id),
-      { orderStatus: status },
-      { new: true },
-    );
+    const order = await Order.findOne(orderParamQuery(req.params.id));
 
     if (!order) {
       return next(ErrorResponse.notFound('Order not found'));
     }
+
+    // Determine which bucket of transitions applies
+    const isPaid = order.paymentStatus === 'paid';
+    const allowed = STATUS_TRANSITIONS[order.orderStatus]?.[isPaid ? 'paid' : 'unpaid'] || [];
+
+    if (!allowed.includes(status)) {
+      return next(
+        ErrorResponse.badRequest(
+          `Cannot move order from "${order.orderStatus}" to "${status}" ` +
+          `(${isPaid ? 'paid' : 'unpaid'} orders may only transition to: ${allowed.join(', ') || 'no further status changes'})`,
+        ),
+      );
+    }
+
+    order.orderStatus = status;
+    await order.save();
 
     // Send delivery notification emails on relevant status transitions
     if (['shipped', 'delivered'].includes(status)) {

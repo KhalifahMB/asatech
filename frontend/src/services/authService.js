@@ -136,7 +136,6 @@ export function getCurrentUser() {
 export async function fetchCurrentUser() {
   const response = await client.get("/auth/me");
   if (response?.user) {
-    // Refresh the cached user
     try {
       localStorage.setItem(USER_KEY, JSON.stringify(response.user));
     } catch {
@@ -144,4 +143,49 @@ export async function fetchCurrentUser() {
     }
   }
   return response;
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────
+
+/** Update the logged-in user's profile (name, phone). */
+export async function updateProfile({ name, phone }) {
+  const response = await client.patch("/auth/me", { name, phone });
+  // Keep local cache in sync so the navbar/header reflect changes immediately.
+  const stored = getStoredUser();
+  if (stored && response) {
+    const updated = { ...stored, ...response };
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+    } catch {
+      /* ignore */
+    }
+  }
+  return response;
+}
+
+// ─── Address book ─────────────────────────────────────────────────────────
+
+/** List saved addresses. */
+export async function getAddresses() {
+  return client.get("/auth/addresses");
+}
+
+/** Add a new address. Returns the updated full addresses array. */
+export async function addAddress(address) {
+  return client.post("/auth/addresses", address);
+}
+
+/** Update an existing address. Returns the updated full addresses array. */
+export async function updateAddress(addressId, address) {
+  return client.patch(`/auth/addresses/${encodeURIComponent(addressId)}`, address);
+}
+
+/** Delete an address. Returns the updated full addresses array. */
+export async function deleteAddress(addressId) {
+  return client.delete(`/auth/addresses/${encodeURIComponent(addressId)}`);
+}
+
+/** Set an address as the default. Returns the updated full addresses array. */
+export async function setDefaultAddress(addressId) {
+  return client.post(`/auth/addresses/${encodeURIComponent(addressId)}/default`);
 }

@@ -4,6 +4,12 @@ import {
   login,
   logout,
   getMe,
+  updateProfile,
+  getAddresses,
+  addAddress,
+  updateAddress,
+  deleteAddress,
+  setDefaultAddress,
   verifyEmail,
   resendVerification,
   requestPasswordReset,
@@ -25,5 +31,15 @@ router.post('/resend-verification', authLimiter, resendVerification);
 router.post('/password/reset-request', authLimiter, requestPasswordReset);
 router.post('/password/reset', authLimiter, resetPassword);
 router.post('/password/change', protect, audit('Password changed', 'User'), changePassword);
+
+// Profile
+router.patch('/me', protect, updateProfile);
+
+// Address book
+router.get('/addresses', protect, getAddresses);
+router.post('/addresses', protect, addAddress);
+router.patch('/addresses/:addressId', protect, updateAddress);
+router.delete('/addresses/:addressId', protect, deleteAddress);
+router.post('/addresses/:addressId/default', protect, setDefaultAddress);
 
 export default router;

@@ -44,6 +44,38 @@ export const ORDER_STATUSES = [
   "cancelled",
 ];
 
+/**
+ * Allowed order-status transitions, mirroring the backend validation.
+ * Paid orders can only advance forward (processing → shipped → delivered);
+ * unpaid orders may move through earlier stages or be cancelled.
+ */
+export const ORDER_STATUS_TRANSITIONS = {
+  pending: {
+    unpaid: ["processing", "confirmed", "cancelled"],
+    paid: ["processing"],
+  },
+  processing: {
+    unpaid: ["confirmed", "cancelled"],
+    paid: ["shipped", "delivered"],
+  },
+  confirmed: {
+    unpaid: ["processing", "cancelled"],
+    paid: ["shipped", "delivered"],
+  },
+  shipped: {
+    unpaid: ["delivered"],
+    paid: ["delivered"],
+  },
+  delivered: {},
+  cancelled: {},
+};
+
+export function nextOrderStatuses(orderStatus, paymentStatus) {
+  const bucket =
+    paymentStatus === "paid" ? "paid" : "unpaid";
+  return ORDER_STATUS_TRANSITIONS[orderStatus]?.[bucket] || [];
+}
+
 export const PAYMENT_STATUSES = [
   "pending",
   "paid",

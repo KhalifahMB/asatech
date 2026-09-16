@@ -11,7 +11,7 @@ import { ScoreBar } from "@/components/charts";
 import { useToast } from "@/state/ToastContext";
 import { useAsync } from "@/hooks/useAsync";
 import { getOrder, updateOrderStatus, sendOrderEmail, deleteOrder } from "@/services/orderService";
-import { ORDER_STATUSES } from "@/lib/constants";
+import { nextOrderStatuses } from "@/lib/constants";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { productImageUrl } from "@/lib/image";
 
@@ -109,6 +109,11 @@ export default function AdminOrderDetails() {
   const customer =
     typeof order.customerId === "object" ? order.customerId : null;
 
+  const availableStatuses = nextOrderStatuses(
+    order.orderStatus,
+    order.paymentStatus
+  );
+
   return (
     <div className="animate-fade-in space-y-6">
       <PageHeader
@@ -196,26 +201,32 @@ export default function AdminOrderDetails() {
             <h2 className="text-base font-semibold text-ink">
               Update order status
             </h2>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <div className="w-full sm:w-56">
-                <SelectField
-                  label="New status"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  options={ORDER_STATUSES.map((s) => ({
-                    value: s,
-                    label: s[0].toUpperCase() + s.slice(1),
-                  }))}
-                />
+            {availableStatuses.length === 0 ? (
+              <p className="mt-4 text-sm text-muted">
+                No further status changes are available for this order.
+              </p>
+            ) : (
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <div className="w-full sm:w-56">
+                  <SelectField
+                    label="New status"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    options={availableStatuses.map((s) => ({
+                      value: s,
+                      label: s[0].toUpperCase() + s.slice(1),
+                    }))}
+                  />
+                </div>
+                <Button
+                  onClick={handleUpdateStatus}
+                  loading={saving}
+                  disabled={!status}
+                >
+                  Update
+                </Button>
               </div>
-              <Button
-                onClick={handleUpdateStatus}
-                loading={saving}
-                disabled={!status}
-              >
-                Update
-              </Button>
-            </div>
+            )}
           </Card>
 
           <Card className="p-5">

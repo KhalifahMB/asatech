@@ -33,15 +33,15 @@ services:
       NODE_ENV: production
       PORT: 8080
       MONGODB_URI: mongodb://asatech:asatech_secure_password_change_me@mongodb:27017/asatech?authSource=admin
-      JWT_SECRET: ${JWT_SECRET:-change_this_secret_in_production}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in your environment}
       PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
       PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
       PAYSTACK_WEBHOOK_SECRET: ${PAYSTACK_WEBHOOK_SECRET}
-      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASS: ${EMAIL_PASS}
-      EMAIL_FROM: ${EMAIL_FROM:-ASATECH <noreply@asatech.ng>}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-noreply@asatech.ng}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-ASATECH}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@asatech.ng}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     ports:
       - "8080:8080"

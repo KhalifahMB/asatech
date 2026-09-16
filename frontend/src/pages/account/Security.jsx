@@ -12,7 +12,6 @@ export default function Security() {
   const [pwd, setPwd] = useState({ current: "", next: "", confirm: "" });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [twoFA, setTwoFA] = useState(false);
 
   const changePassword = async (e) => {
     e.preventDefault();
@@ -85,17 +84,9 @@ export default function Security() {
             <p className="text-sm text-muted">Add an extra layer of security to your account.</p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setTwoFA((v) => !v);
-            toast.info(twoFA ? "2FA disabled" : "2FA setup — coming soon");
-          }}
-          role="switch"
-          aria-checked={twoFA}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition ${twoFA ? "bg-brand-600" : "bg-raised border border-line"}`}
-        >
-          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${twoFA ? "left-[22px]" : "left-0.5"}`} />
-        </button>
+        <span className="inline-flex shrink-0 items-center rounded-full border border-line bg-raised px-2.5 py-1 text-xs font-medium text-muted">
+          Coming soon
+        </span>
       </Card>
 
       <Card className="p-5 sm:p-6">

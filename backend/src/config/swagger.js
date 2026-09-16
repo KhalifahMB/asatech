@@ -576,12 +576,12 @@ const swaggerSpec = {
         responses: enriched(ok('List of audit log entries'), errors),
       },
     },
-    '/admin/maintenance/seed-demo': {
+    '/admin/maintenance/seed-catalogue': {
       post: {
         tags: ['Admin'],
-        summary: 'Seed the default admin + demo catalogue (admin, opt-in)',
+        summary: 'Seed the default admin + sample catalogue (admin, opt-in)',
         security: bearer,
-        responses: enriched(ok('Demo data seeded'), errors),
+        responses: enriched(ok('Sample catalogue seeded'), errors),
       },
     },
 

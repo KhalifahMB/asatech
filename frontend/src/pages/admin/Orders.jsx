@@ -7,12 +7,12 @@ import { StatusBadge, RiskBadge } from "@/components/ui/Badges";
 import { EmptyState, Skeleton } from "@/components/ui/Feedback";
 import { SelectField } from "@/components/ui/Field";
 import { useAsync } from "@/hooks/useAsync";
-import { listOrders } from "@/services/orderService";
+import { listAllOrders } from "@/services/orderService";
 import { ORDER_STATUSES } from "@/lib/constants";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 export default function AdminOrders() {
-  const { data: orders, loading } = useAsync(() => listOrders({}), []);
+  const { data: orders, loading } = useAsync(() => listAllOrders({ limit: 200 }), []);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
 

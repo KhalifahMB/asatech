@@ -70,12 +70,40 @@ const userSchema = new mongoose.Schema({
     default: 'active',
   },
   addresses: [{
-    label: String,
-    line1: String,
-    line2: String,
-    city: String,
-    state: String,
-    phone: String,
+    label: {
+      type: String,
+      default: 'Home',
+    },
+    name: {
+      type: String,
+      required: [true, 'Recipient name is required'],
+      trim: true,
+    },
+    line1: {
+      type: String,
+      required: [true, 'Address line 1 is required'],
+      trim: true,
+    },
+    line2: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    city: {
+      type: String,
+      required: [true, 'City is required'],
+      trim: true,
+    },
+    state: {
+      type: String,
+      required: [true, 'State is required'],
+      trim: true,
+    },
+    phone: {
+      type: String,
+      required: [true, 'Phone number is required'],
+      trim: true,
+    },
     default: {
       type: Boolean,
       default: false,

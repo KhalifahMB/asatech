@@ -10,6 +10,8 @@ import {
   XCircle,
   AlertTriangle,
   Loader2,
+  MapPin,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Surfaces";
@@ -21,6 +23,7 @@ import { formatCurrency } from "@/lib/format";
 import { productImageUrl } from "@/lib/image";
 import { initializePayment, launchPaystack, loadPaystackScript, verifyPayment } from "@/services/paymentService";
 import { getOrder } from "@/services/orderService";
+import { getAddresses, addAddress } from "@/services/authService";
 
 const SHIPPING_FLAT = 2500;
 const FREE_SHIPPING_THRESHOLD = 500000;
@@ -91,10 +94,14 @@ export default function Checkout() {
       email: user?.email || "",
       phone: user?.phone || "",
       line1: "",
+      line2: "",
       city: "",
       state: "",
     };
   });
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [saveAddr, setSaveAddr] = useState(true);
   const [errors, setErrors] = useState({});
   const [payError, setPayError] = useState("");
   const [paying, setPaying] = useState(false);
@@ -110,6 +117,26 @@ export default function Checkout() {
   const total = subtotal + shipping;
 
   const stepIndex = useMemo(() => STEPS.findIndex((s) => s.key === step), [step]);
+
+  // Load the signed-in user's address book for the delivery step. Guests skip.
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    setLoadingSaved(true);
+    getAddresses()
+      .then((list) => {
+        if (!cancelled) setSavedAddresses(list || []);
+      })
+      .catch(() => {
+        /* address book unavailable — checkout can continue via manual form */
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSaved(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const hasPendingOrder = Boolean(orderId);
   if (items.length === 0 && step !== "confirmation" && !hasPendingOrder) {
@@ -142,6 +169,37 @@ export default function Checkout() {
     setErrors(e);
     if (Object.keys(e).length) return;
     setStep("payment");
+  };
+
+  /** Fill the delivery form from a saved address book entry. */
+  const applySavedAddress = (addr) => {
+    setDelivery((d) => ({
+      ...d,
+      name: addr.name || d.name,
+      phone: addr.phone || d.phone,
+      line1: addr.line1,
+      line2: addr.line2 || "",
+      city: addr.city,
+      state: addr.state,
+    }));
+    setErrors({});
+  };
+
+  /** Persist the entered delivery address to the user's address book. */
+  const persistAddressIfRequested = () => {
+    if (!user || !saveAddr || !delivery.line1 || !delivery.city || !delivery.state) return;
+    addAddress({
+      label: "Home",
+      name: delivery.name,
+      line1: delivery.line1,
+      line2: delivery.line2 || "",
+      city: delivery.city,
+      state: delivery.state,
+      phone: delivery.phone,
+      default: false,
+    }).catch(() => {
+      /* best-effort save — never block checkout on this */
+    });
   };
 
   const handlePay = async () => {
@@ -187,6 +245,7 @@ export default function Checkout() {
         {
           onSuccess: (response) => {
             setPaying(false);
+            persistAddressIfRequested();
             setResult({ status: "pending-verification", reference: response?.reference });
             setStep("confirmation");
             if (newOrderId)
@@ -375,6 +434,45 @@ export default function Checkout() {
           {step === "delivery" && (
             <Card className="p-5">
               <h2 className="text-base font-semibold text-ink">Delivery information</h2>
+
+              {user && savedAddresses.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-ink">Saved addresses</p>
+                  <p className="text-xs text-muted">Pick one to fill the form or enter a new one below.</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {savedAddresses.map((addr) => (
+                      <button
+                        key={addr._id}
+                        type="button"
+                        onClick={() => applySavedAddress(addr)}
+                        className={`group rounded-xl border p-3 text-left transition ${
+                          addr.default
+                            ? "border-brand-500/60 bg-brand-500/5 hover:bg-brand-500/10"
+                            : "border-line bg-raised hover:border-brand-500/40"
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                          <MapPin className="h-3.5 w-3.5 text-brand-500" />
+                          {addr.label || "Home"}
+                          {addr.default && (
+                            <Star className="h-3 w-3 fill-brand-500 text-brand-500" aria-label="Default address" />
+                          )}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted">
+                          {addr.name} · {addr.line1}, {addr.city}, {addr.state}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {loadingSaved && (
+                <p className="mt-3 flex items-center gap-2 text-xs text-muted">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading saved addresses…
+                </p>
+              )}
+
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <TextField
                   label="Full name"
@@ -409,6 +507,13 @@ export default function Checkout() {
                     required
                   />
                 </div>
+                <div className="sm:col-span-2">
+                  <TextField
+                    label="Address line 2 (optional)"
+                    value={delivery.line2}
+                    onChange={(e) => setDelivery((d) => ({ ...d, line2: e.target.value }))}
+                  />
+                </div>
                 <TextField
                   label="City"
                   value={delivery.city}
@@ -424,6 +529,19 @@ export default function Checkout() {
                   required
                 />
               </div>
+
+              {user && (
+                <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand-600"
+                    checked={saveAddr}
+                    onChange={(e) => setSaveAddr(e.target.checked)}
+                  />
+                  Save this address to my address book
+                </label>
+              )}
+
               <div className="mt-6 flex justify-between">
                 <Button variant="ghost" onClick={() => setStep("review")} icon={ArrowLeft}>
                   Back

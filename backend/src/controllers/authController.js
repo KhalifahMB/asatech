@@ -314,6 +314,189 @@ export const logout = async (req, res, next) => {
 };
 
 /**
+ * @desc    Update profile name / phone
+ * @route   PATCH /api/v1/auth/me
+ * @access  Private
+ */
+export const updateProfile = async (req, res, next) => {
+  try {
+    const { name, phone } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name.trim();
+    if (phone !== undefined) updates.phone = phone.trim() || undefined;
+
+    if (Object.keys(updates).length === 0) {
+      return next(ErrorResponse.badRequest('No valid fields to update'));
+    }
+
+    const user = await User.findByIdAndUpdate(req.user._id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!user) {
+      return next(ErrorResponse.notFound('User not found'));
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        status: user.status,
+        emailVerified: user.emailVerified,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const MAX_ADDRESSES = 20;
+
+/**
+ * @desc    List saved addresses
+ * @route   GET /api/v1/auth/addresses
+ * @access  Private
+ */
+export const getAddresses = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('addresses');
+    res.json({ success: true, data: user?.addresses || [] });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Add a new address
+ * @route   POST /api/v1/auth/addresses
+ * @access  Private
+ */
+export const addAddress = async (req, res, next) => {
+  try {
+    const { label, name, line1, line2, city, state, phone, default: isDefault } = req.body;
+
+    if (!name || !line1 || !city || !state || !phone) {
+      return next(ErrorResponse.badRequest('Name, address, city, state, and phone are required'));
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return next(ErrorResponse.notFound('User not found'));
+
+    if (user.addresses.length >= MAX_ADDRESSES) {
+      return next(ErrorResponse.badRequest(`Maximum of ${MAX_ADDRESSES} addresses reached`));
+    }
+
+    // If this is the first address, force it to be the default
+    const makeDefault = isDefault || user.addresses.length === 0;
+
+    if (makeDefault) {
+      user.addresses.forEach((a) => { a.default = false; });
+    }
+
+    user.addresses.push({
+      label: (label || '').trim() || 'Home',
+      name: name.trim(),
+      line1: line1.trim(),
+      line2: (line2 || '').trim(),
+      city: city.trim(),
+      state: state.trim(),
+      phone: phone.trim(),
+      default: makeDefault,
+    });
+
+    await user.save({ validateBeforeSave: true });
+
+    res.status(201).json({ success: true, data: user.addresses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update an address
+ * @route   PATCH /api/v1/auth/addresses/:addressId
+ * @access  Private
+ */
+export const updateAddress = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return next(ErrorResponse.notFound('User not found'));
+
+    const addr = user.addresses.id(req.params.addressId);
+    if (!addr) return next(ErrorResponse.notFound('Address not found'));
+
+    const { label, name, line1, line2, city, state, phone, default: isDefault } = req.body;
+    if (label !== undefined) addr.label = (label || '').trim() || 'Home';
+    if (name !== undefined) addr.name = name.trim();
+    if (line1 !== undefined) addr.line1 = line1.trim();
+    if (line2 !== undefined) addr.line2 = (line2 || '').trim();
+    if (city !== undefined) addr.city = city.trim();
+    if (state !== undefined) addr.state = state.trim();
+    if (phone !== undefined) addr.phone = phone.trim();
+    if (isDefault === true) {
+      user.addresses.forEach((a) => { a.default = false; });
+      addr.default = true;
+    }
+
+    await user.save({ validateBeforeSave: true });
+
+    res.json({ success: true, data: user.addresses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete an address
+ * @route   DELETE /api/v1/auth/addresses/:addressId
+ * @access  Private
+ */
+export const deleteAddress = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return next(ErrorResponse.notFound('User not found'));
+
+    const addr = user.addresses.id(req.params.addressId);
+    if (!addr) return next(ErrorResponse.notFound('Address not found'));
+
+    addr.deleteOne();
+    await user.save({ validateBeforeSave: false });
+
+    res.json({ success: true, data: user.addresses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Set an address as the default
+ * @route   POST /api/v1/auth/addresses/:addressId/default
+ * @access  Private
+ */
+export const setDefaultAddress = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return next(ErrorResponse.notFound('User not found'));
+
+    const addr = user.addresses.id(req.params.addressId);
+    if (!addr) return next(ErrorResponse.notFound('Address not found'));
+
+    user.addresses.forEach((a) => { a.default = false; });
+    addr.default = true;
+    await user.save({ validateBeforeSave: false });
+
+    res.json({ success: true, data: user.addresses });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Get current logged in user
  * @route   GET /api/v1/auth/me
  * @access  Private
