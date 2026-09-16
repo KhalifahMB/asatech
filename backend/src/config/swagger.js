@@ -6,7 +6,9 @@
  * API regardless of how controllers are annotated internally.
  */
 
-const apiBase = `/api/${process.env.API_VERSION || 'v1'}`;
+import config from './index.js';
+
+const apiBase = `/api/${config.apiVersion}`;
 
 // ─── Small helpers so every operation reads consistently ───────────────────
 const bearer = [{ bearerAuth: [] }];

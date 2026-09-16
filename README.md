@@ -52,7 +52,7 @@ asatech/
 - MongoDB 7 + Mongoose 8
 - JWT authentication, bcrypt password hashing
 - Paystack for payments
-- Nodemailer for transactional email
+- Brevo for transactional email
 - Helmet, CORS, express-rate-limit, express-mongo-sanitize, HPP
 
 ## Quick Start
@@ -88,7 +88,7 @@ cd backend
 npm install
 cp .env.example .env
 # Edit .env — set MONGODB_URI, JWT_SECRET, PAYSTACK keys
-npm run seed        # Seeds admin user and demo products
+npm run seed        # Seeds admin user and sample catalogue
 npm run dev         # Starts on port 8080
 ```
 
@@ -106,8 +106,8 @@ Two `.env` files are required:
 
 | File | Purpose | Contains |
 |------|---------|----------|
-| `.env` (root) | Frontend | `VITE_API_BASE_URL`, `VITE_PAYSTACK_PUBLIC_KEY` |
-| `backend/.env` | Backend | `MONGODB_URI`, `JWT_SECRET`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET`, `EMAIL_*`, `FRONTEND_URL` |
+| `frontend/.env` | Frontend | `VITE_API_BASE_URL`, `VITE_PAYSTACK_PUBLIC_KEY` |
+| `backend/.env` | Backend | `MONGODB_URI`, `JWT_SECRET`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_WEBHOOK_SECRET`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, `FRONTEND_URL` |
 
 See the respective `.env.example` files and the `docs/` folder for details.
 
@@ -115,13 +115,9 @@ See the respective `.env.example` files and the `docs/` folder for details.
 
 After running `npm run seed` (or `docker compose exec backend npm run seed`),
 sign in with the seeded admin account defined by `ADMIN_EMAIL` and
-`ADMIN_PASSWORD` in `backend/.env`.
+`ADMIN_PASSWORD` in `backend/.env` (or via the admin maintenance endpoint).
 
-Defaults (change immediately in production):
-```
-Email:    admin@asatech.ng
-Password: As@Tech2026!SecureAdmin#
-```
+Set a strong, unique `ADMIN_PASSWORD` before the first deploy.
 
 ## Features
 
@@ -212,7 +208,7 @@ Full specification: `docs/API.md` and live Swagger UI at
 ## Testing
 
 **Manual checklist:**
-- Register → auto-login → account dashboard
+- Register → verify email → sign in → account dashboard
 - Add products to cart → checkout (auth required) → Paystack popup
 - Admin login → dashboard → manage products / orders / fraud alerts
 - Dark/light theme toggle persists across reloads
@@ -248,7 +244,7 @@ Full specification: `docs/API.md` and live Swagger UI at
 - **Frontend**: Vercel, Netlify, or Cloudflare Pages
 - **Backend**: Railway, Render, Fly.io, or a VPS
 - **Database**: MongoDB Atlas (free tier suits development)
-- **Email**: SendGrid, Mailgun, or Amazon SES (via SMTP)
+- **Email**: Brevo (transactional REST API — see `BREVO_API_KEY`)
 
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for detailed steps.
 

@@ -154,26 +154,6 @@ app.use(`${apiBase}/fraud/alerts`, fraudRoutes);
 
 // ─── API documentation ─────────────────────────────────────────────────────
 if (!config.isProduction || process.env.ENABLE_DOCS === 'true') {
-  const swaggerSpec = swaggerJsdoc({
-    definition: {
-      openapi: '3.0.0',
-      info: {
-        title: 'ASATECH API',
-        version: '1.0.0',
-        description: 'ASATECH E-Commerce Platform API',
-      },
-      servers: [{ url: `${apiBase}`, description: config.nodeEnv }],
-      components: {
-        securitySchemes: {
-          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-        },
-      },
-    },
-    apis: [
-      path.join(__dirname, 'routes/*.js'),
-      path.join(__dirname, 'controllers/*.js'),
-    ],
-  });
   app.use(`${apiBase}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
 
