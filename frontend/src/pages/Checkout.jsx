@@ -22,6 +22,7 @@ import { useAuth } from "@/state/AuthContext";
 import { formatCurrency } from "@/lib/format";
 import { productImageUrl } from "@/lib/image";
 import { initializePayment, launchPaystack, loadPaystackScript, verifyPayment } from "@/services/paymentService";
+import PaymentModal from "@/components/ui/PaymentModal";
 import { getOrder } from "@/services/orderService";
 import { getAddresses, addAddress } from "@/services/authService";
 
@@ -105,6 +106,7 @@ export default function Checkout() {
   const [errors, setErrors] = useState({});
   const [payError, setPayError] = useState("");
   const [paying, setPaying] = useState(false);
+  const [payStatus, setPayStatus] = useState(null); // null | initializing | handoff | verifying | confirmed | failed
   const [result, setResult] = useState(() => {
     const s = savedSession.current;
     if (s?.orderId) return { status: "pending-verification", reference: s.reference || null };
@@ -205,6 +207,7 @@ export default function Checkout() {
   const handlePay = async () => {
     setPaying(true);
     setPayError("");
+    setPayStatus("initializing");
     try {
       await loadPaystackScript();
       // One idempotency key per checkout attempt — persisted with the session
@@ -245,6 +248,7 @@ export default function Checkout() {
         {
           onSuccess: (response) => {
             setPaying(false);
+            setPayStatus("verifying");
             persistAddressIfRequested();
             setResult({ status: "pending-verification", reference: response?.reference });
             setStep("confirmation");
@@ -590,6 +594,23 @@ export default function Checkout() {
                   Pay {formatCurrency(total)}
                 </Button>
               </div>
+
+              {/* In-app payment progress modal — keeps the host checkout page
+                  mounted behind it, so it can never blank white while the
+                  payment is handed off, verified paystack-side, and settled. */}
+              <PaymentModal
+                open={payStatus !== null}
+                status={payStatus}
+                email={delivery.email}
+                onRetry={() => {
+                  setPayStatus("initializing");
+                  handlePay();
+                }}
+                onClose={() => {
+                  setPayStatus(null);
+                  setStep("payment");
+                }}
+              />
             </Card>
           )}
 

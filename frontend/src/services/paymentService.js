@@ -78,8 +78,11 @@ export function launchPaystack(init, handlers = {}) {
     return null;
   }
 
-  // Use Paystack inline SDK if available
-  if (typeof window !== "undefined" && window.PaystackPop) {
+  // Inline SDK path — kept for popup-style flows that opt in explicitly.
+  // NOTE: `handler.openIframe()` renders a full-page Paystack overlay over the
+  // host app. In sandboxed/blocked contexts that iframe can come up as a blank
+  // white screen, so checkout should prefer the hosted new-tab handoff instead.
+  if (mode === "inline" && typeof window !== "undefined" && window.PaystackPop) {
     const handler = window.PaystackPop.setup({
       key: publicKey,
       email,
@@ -88,7 +91,7 @@ export function launchPaystack(init, handlers = {}) {
       ref: reference,
       metadata,
       callback: (response) => {
-        // Callback indicates popup completed — backend must verify
+        // Callback indicates payment completed — backend must verify
         handlers.onSuccess?.(response);
       },
       onClose: () => handlers.onClose?.(),
@@ -97,14 +100,36 @@ export function launchPaystack(init, handlers = {}) {
     return handler;
   }
 
-  // Fallback to redirect checkout
-  if (reference) {
-    window.location.href = `https://checkout.paystack.com/${reference}`;
-    return null;
+  // Hosted new-tab handoff (default) — the host page stays mounted behind the
+  // PaymentModal so it can never blank white while the modal shows progress
+  // (handoff → verifying → confirmed / failed).
+  const hostedUrl = init.authorizationUrl || (reference && `https://checkout.paystack.com/${reference}`);
+  if (mode === "tab" && hostedUrl) {
+    const win = window.open(hostedUrl, "_blank", "noopener,noreferrer");
+    if (win) win.focus();
+    handlers.onHandoff?.(hostedUrl);
+    return { hostedUrl, window: win };
   }
 
   handlers.onError?.(new Error("Paystack checkout could not be opened."));
   return null;
+}
+
+/**
+ * Open the hosted Paystack checkout in a new tab and return its URL.
+ *
+ * The host app is never navigated or overlaid, so checkout can never render a
+ * blank white screen. Suitable for driving the in-app PaymentModal.
+ *
+ * @param {object} init - { reference, authorizationUrl }
+ * @returns {string|null} hosted checkout URL
+ */
+export function openHostedCheckout(init = {}) {
+  const url = init.authorizationUrl || (init.reference && `https://checkout.paystack.com/${init.reference}`);
+  if (!url) return null;
+  const win = window.open(url, "_blank", "noopener,noreferrer");
+  if (win) win.focus();
+  return url;
 }
 
 /** Load the Paystack inline JS SDK on demand. */
